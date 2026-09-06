@@ -1,0 +1,105 @@
+import type { AnalysisResult } from './types';
+
+/* Realistic fixture for previewing the dashboard without spending an API call. */
+export const SAMPLE: AnalysisResult = {
+  overall_score: 68.4,
+  sub_scores: [
+    {
+      key: 'ats', label: 'ATS parseability', earned: 12, max_points: 25,
+      deductions: [
+        { rule: 'ats.multi_column', title: 'Multi-column layout', points: 8, severity: 'critical',
+          evidence: 'Side-by-side text columns detected on page(s) 1, 2.',
+          fix: 'Move to a single-column layout. Many parsers read across columns and interleave the two, scrambling your job titles and dates.' },
+        { rule: 'ats.header_footer', title: 'Text sits in the page header or footer', points: 3, severity: 'major',
+          evidence: 'Found in the header/footer band: "yasmin@example.com  ·  +966 51 234 5678"',
+          fix: 'Move this into the body of the page. If your contact details are up there, an ATS may discard them entirely.' },
+        { rule: 'ats.tables', title: 'Content laid out in tables', points: 2, severity: 'major',
+          evidence: 'Table structures on page(s) 1.',
+          fix: 'Replace tables with plain paragraphs or bullets; cell content is often dropped.' },
+      ],
+    },
+    {
+      key: 'keywords', label: 'Keyword & skill match', earned: 21.9, max_points: 35,
+      deductions: [
+        { rule: 'kw.missing.critical', title: 'Missing: Distributed systems design', points: 5.83, severity: 'critical',
+          evidence: 'Not found anywhere in the resume.',
+          fix: "The job description lists this as critical. If you have this experience, add it explicitly with the same wording the posting uses. If you don't, treat it as a genuine gap to close rather than something to add." },
+        { rule: 'kw.weak.critical', title: 'Weakly evidenced: Payments settlement', points: 2.92, severity: 'minor',
+          evidence: 'Closest evidence: "worked on the payouts service"',
+          fix: "The job description lists this as critical. Make it explicit and quantify it, using the posting's wording." },
+        { rule: 'kw.missing.preferred', title: 'Missing: Kubernetes', points: 2.92, severity: 'major',
+          evidence: 'Not found anywhere in the resume.',
+          fix: "The job description lists this as preferred. If you have this experience, add it explicitly with the same wording the posting uses. If you don't, treat it as a genuine gap to close rather than something to add." },
+      ],
+    },
+    {
+      key: 'experience', label: 'Experience & seniority fit', earned: 18.5, max_points: 20,
+      deductions: [
+        { rule: 'exp.years_short', title: '1.0 years short of the stated requirement', points: 1.5, severity: 'major',
+          evidence: 'Resume evidences ~4.0 years; posting asks 5.0.',
+          fix: "Check for relevant experience you haven't counted -- internships, freelance, or in-role project work often go unlisted." },
+      ],
+    },
+    {
+      key: 'formatting', label: 'Formatting & structure', earned: 16, max_points: 20,
+      deductions: [
+        { rule: 'fmt.writing', title: 'Experience: Duty stated without an outcome', points: 2, severity: 'major',
+          evidence: 'Responsible for the merchant payouts service',
+          fix: 'Designed the merchant payouts API serving 8,000 restaurants' },
+        { rule: 'fmt.phone_not_e164', title: 'Phone number missing the +966 country code', points: 1, severity: 'minor',
+          evidence: 'Found a local-format Saudi mobile (05X) with no international prefix.',
+          fix: 'Write it as +966 5X XXX XXXX so recruiters outside the Kingdom can dial it.' },
+        { rule: 'fmt.nonstandard_headings', title: 'Unconventional section headings', points: 1, severity: 'minor',
+          evidence: 'Styled as headings but not recognised: CAREER SNAPSHOT, WHAT I BRING',
+          fix: 'Rename to the conventional equivalent so a parser knows what the section is.' },
+      ],
+    },
+  ],
+  requirements: [
+    { skill: 'Python', importance: 'critical', status: 'present', note: '', evidence: 'Built settlement services in Python and Django' },
+    { skill: 'PostgreSQL', importance: 'critical', status: 'present', note: '', evidence: 'Modelled ledger schema in PostgreSQL' },
+    { skill: 'Distributed systems design', importance: 'critical', status: 'missing', evidence: '', note: 'No evidence of distributed system design work.' },
+    { skill: 'Payments settlement', importance: 'critical', status: 'weak', note: 'Adjacent but not demonstrated.', evidence: 'worked on the payouts service' },
+    { skill: 'Kubernetes', importance: 'preferred', status: 'missing', evidence: '', note: 'Not mentioned.' },
+    { skill: 'Arabic language', importance: 'preferred', status: 'present', note: '', evidence: 'Languages: Arabic (native), English (fluent)' },
+  ],
+  experience: {
+    jd_seniority: 'Senior', resume_seniority: 'Mid-senior', years_required: 5, years_evidenced: 4,
+    fit: 'match', gaps: [], evidence: ['Backend Engineer, Foodics — 2020–2022', 'Senior Backend Engineer, Tamara — 2022–Present'],
+  },
+  writing: {
+    summary_verdict: 'Strong technical substance held back by presentation: the achievements are real but written as duties, and the two-column layout puts the whole thing at risk before a human ever reads it.',
+    issues: [
+      { section: 'Experience', severity: 'major',
+        original: 'Responsible for the merchant payouts service',
+        suggested: 'Designed the merchant payouts API serving 8,000 restaurants',
+        why: 'States a duty rather than an outcome. The 8,000 figure already appears later in the resume — lead with it.' },
+      { section: 'Summary', severity: 'minor',
+        original: 'Hard-working engineer passionate about fintech',
+        suggested: 'Backend engineer, four years building payment and settlement systems in Riyadh',
+        why: 'Opens with an unverifiable trait. Replace with the concrete positioning already evidenced below.' },
+      { section: 'Experience', severity: 'major',
+        original: 'Helped reduce payout latency',
+        suggested: 'Reduced payout latency from 4 hours to 12 minutes',
+        why: 'The specific numbers appear in your own bullet further down; surface them here where a screener will see them.' },
+    ],
+  },
+  top_fixes: [
+    { rule: 'ats.multi_column', title: 'Multi-column layout', points: 8, severity: 'critical',
+      evidence: 'Side-by-side text columns detected on page(s) 1, 2.',
+      fix: 'Move to a single-column layout. Many parsers read across columns and interleave the two, scrambling your job titles and dates.' },
+    { rule: 'kw.missing.critical', title: 'Missing: Distributed systems design', points: 5.83, severity: 'critical',
+      evidence: 'Not found anywhere in the resume.',
+      fix: "The job description lists this as critical. If you have this experience, add it explicitly with the same wording the posting uses. If you don't, treat it as a genuine gap to close rather than something to add." },
+    { rule: 'ats.header_footer', title: 'Text sits in the page header or footer', points: 3, severity: 'major',
+      evidence: 'Found in the header/footer band: "yasmin@example.com  ·  +966 51 234 5678"',
+      fix: 'Move this into the body of the page. If your contact details are up there, an ATS may discard them entirely.' },
+  ],
+  parse_facts: {
+    page_count: 2, char_count: 3891, is_scanned: false, has_extractable_text: true,
+    multi_column_pages: [1, 2], table_pages: [1],
+    detected_sections: ['education', 'experience', 'skills', 'summary'],
+    nonstandard_headings: ['CAREER SNAPSHOT', 'WHAT I BRING'],
+    has_email: true, has_phone: true, primary_language: 'en', is_bilingual: false,
+  },
+};

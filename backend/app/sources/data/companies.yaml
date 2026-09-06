@@ -1,0 +1,48 @@
+# Tier 0 company registry.
+#
+# Each entry maps a company to the ATS board that publishes its jobs. Tokens
+# verified live where marked. Adding a company here removes it from the browser
+# agent's workload entirely -- always check for a board before writing a scraper.
+#
+# To find a token: open the company's careers page and look at the URL its job
+# list is served from, e.g. boards.greenhouse.io/<token> or
+# jobs.ashbyhq.com/<token>.
+
+- company: Tamara
+  industry: fintech
+  source: greenhouse
+  token: tamara
+  verified: true          # 35 jobs, 11 Riyadh
+
+- company: Hala
+  industry: fintech
+  source: greenhouse
+  token: hala
+  verified: true          # 14 jobs
+
+- company: Rain
+  industry: fintech
+  source: ashby
+  token: rain
+  verified: true          # 47 jobs
+
+- company: Lean Technologies
+  industry: fintech
+  source: ashby
+  token: Lean
+  verified: true          # board live, currently empty
+
+# --- Candidates to verify -------------------------------------------------
+# These are known Saudi/MENA employers whose board token is not yet confirmed.
+# `verified: false` entries are expected to 404 until someone checks them.
+- company: Tabby
+  industry: fintech
+  source: greenhouse
+  token: tabby
+  verified: false
+
+- company: Foodics
+  industry: tech
+  source: greenhouse
+  token: foodics
+  verified: false
