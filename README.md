@@ -2,8 +2,10 @@
 
 Two agents for a Saudi job search:
 
-1. **Resume analyst** (built) — scores a resume against one job posting out of 100 and shows exactly which points it lost and why.
-2. **Recruiter** (planned, Phase 3) — matches jobs, tailors applications, sends from Gmail behind a review queue.
+1. **Resume analyst** — scores a resume against one job posting out of 100 and shows exactly which points it lost and why.
+2. **Job scout** — finds roles across ATS boards and Google for Jobs, ranks them against your CV with the *same* scorer, and writes a short brief. It cannot apply to anything.
+
+Both are built. An earlier plan had Agent 2 emailing companies from a contact dataset; that was dropped in favour of discovery, and its artifacts removed.
 
 ## What makes the score trustworthy
 
@@ -21,11 +23,20 @@ The agent is also constrained never to invent experience. A missing skill is rep
 cd backend && python3 -m venv .venv && ./.venv/bin/pip install -r requirements.txt
 ```
 
-Add your key:
+Add your keys:
 
 ```bash
-cp backend/.env.example backend/.env && echo "Now put your ANTHROPIC_API_KEY in backend/.env"
+cp backend/.env.example backend/.env
 ```
+
+| Key | Needed for | Getting one |
+|---|---|---|
+| `ANTHROPIC_API_KEY` | The resume analyst | [console.anthropic.com](https://console.anthropic.com) |
+| `OPENROUTER_API_KEY` | The scout's evidence-gathering, on the shortlist only — the ranking itself is still computed in Python | [openrouter.ai](https://openrouter.ai) |
+| `JSEARCH_API_KEY` | *Optional.* Google for Jobs, which is how LinkedIn roles reach the scan | [openwebninja.com/api/jsearch](https://www.openwebninja.com/api/jsearch) — free tier is 200 requests/month |
+
+Without the JSearch key the scout still runs; it just searches the free ATS
+boards only, and the "Also search Google for Jobs" checkbox does nothing.
 
 Start the API:
 
@@ -63,8 +74,11 @@ A resume with no machine-readable text scores **0**, not a partial score — eve
 ## Deliberate limits
 
 - **No LinkedIn or Bayt crawling.** Both robots.txt forbid automated access to
-  their job pages, for every agent, even logged out. Jobs from those sites come
-  in by pasting a URL — one user action, one fetch.
+  their job pages, for every agent, even logged out. Their roles reach the scan
+  two other ways: through Google for Jobs, which LinkedIn syndicates to
+  deliberately, or by pasting a URL — one user action, one fetch. Neither path
+  touches a disallowed page, and pasting a link to LinkedIn's guest search or
+  Bayt's listings does not unlock them.
 - **The scout agent cannot apply.** It has no tool that submits a form, types a
   password, or uploads a file. That is enforced in the browser wrapper, not in a
   prompt, so a prompt injection in a job listing cannot make it apply to
