@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import resumes, scout
+from app.api import resumes, scout, tailor
 from app.core.config import get_settings
 from app.models.db import init_db
 
@@ -33,6 +33,7 @@ app.add_middleware(
 
 app.include_router(resumes.router)
 app.include_router(scout.router)
+app.include_router(tailor.router)
 
 
 @app.get("/api/health")

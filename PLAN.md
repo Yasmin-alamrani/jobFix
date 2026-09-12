@@ -1,3 +1,228 @@
+# Plan — CV analysis → job match → tailor → export
+
+One flow, four stages. Stages 1 and 2 largely exist; this plan completes them
+and adds tailoring and export on top.
+
+Approved 11 Sep 2026. **Phases 0, 1 and 2 are done**; 3 and 4 are not started.
+
+## Where the code actually stands
+
+Audited before planning, so the roadmap builds on what is there rather than
+beside it.
+
+**Built and reusable — do not rewrite:**
+
+| Asset | Why it matters here |
+|---|---|
+| `analyst/scoring.py` | Scores in Python from model *evidence*. Every new score in this plan follows the same split; no feature emits a number from a model. |
+| `NO_FABRICATION` (`analyzer.py`) | Already the exact "never invent experience" rule the tailoring stage needs. Reuse the constant, do not restate it. |
+| `WritingIssue{original, suggested, why, severity}` | Already a before/after diff payload. The tailoring UI renders this; it does not need a new shape. |
+| `Requirement{skill, importance, status, evidence}` | Already must-have vs nice-to-have with evidence. Job-URL analysis renders it. |
+| `analyst/parser.py` → `ParseReport` | Deterministic ATS facts, incl. Arabic ratio and bilingual detection. Export reuses the language signal. |
+| `JobSource` protocol + `sources/` | The provider/adapter interface already exists. New sources implement `fetch(token)`; nothing else changes. |
+| `core/claude.py::call_structured` | Schema-validated Claude calls. Every new Claude feature goes through it. |
+| `scout/llm.py::complete_json` | The same for OpenRouter/DeepSeek, with a repair retry. |
+
+**Missing, and therefore the work:** structured CV entities, field suggestion,
+tailoring assembly, CV versions, export, search filters, company targeting,
+inbound rate limiting, data deletion.
+
+## Two findings that set the order
+
+**SSRF is reachable today.** `Policy.for_pasted_url()` treats the user naming a
+host as satisfying the host gate, and nothing inspects the resolved IP.
+Verified, not inferred — all five of these were allowed:
+
+```
+http://169.254.169.254/latest/meta-data/   cloud metadata
+http://127.0.0.1:8000/api/health           our own API
+http://localhost/admin
+http://[::1]:8000/
+http://192.168.1.1/
+```
+
+Impact is low while this is localhost-only and single-user, and becomes serious
+the moment it is hosted. It is cheap to fix now and awkward later, so it leads.
+
+**The analyst has no injection boundary.** `scout/extract.py` wraps untrusted
+page text in data delimiters under a system rule that content inside them is
+never an instruction. `analyzer.py` interpolates the job description with `---`
+fences and no such rule. Stage 2B feeds *fetched* job text into the analyst, so
+that path inherits the scout's treatment before it is wired up.
+
+---
+
+## Phase 0 — security and prompt infrastructure ✅
+
+Small, and unblocks everything after it.
+
+| | File |
+|---|---|
+| add | `core/safe_fetch.py` — resolve the host, reject private / loopback / link-local / multicast / reserved ranges, re-check after every redirect |
+| add | `core/ratelimit.py` — in-process token bucket, applied as a dependency to the AI and fetch endpoints |
+| add | `prompts/` — `analyst_v1.py`, `fields_v1.py`, `tailor_v1.py`, `targeting_v1.py`, each carrying `VERSION`; the version is persisted with every result it produces |
+| modify | `scout/policy.py` — the IP guard runs inside `check()`, so no caller can skip it |
+| modify | `analyst/analyzer.py` — import prompts, adopt the scout's data-delimiter rule |
+| modify | `app/main.py` — register the limiter |
+
+**Built.** Two notes on what the implementation settled differently from the
+sketch above:
+
+- **The SSRF check is split across two layers, not one.** `Policy.check` runs an
+  *offline* gate that inspects the URL — an address literal, or a local name
+  like `localhost` / `*.internal`. The resolve-time check, for a hostname that
+  points somewhere private, runs inside `safe_fetch.safe_get` on the fetch
+  itself, where it also re-checks after every redirect. Putting the DNS lookup
+  in the policy gate would have made a gate do network I/O and dragged the
+  offline test suite onto the network; putting it *only* there would have missed
+  the redirect hop entirely. All 13 vectors are refused, verified by test.
+- **The limiter is a closure, not a callable class.** FastAPI resolves a
+  dependency's annotations against `__globals__`, which a class instance does
+  not have, so `request: Request` stayed an unresolved string and every guarded
+  endpoint answered 422. Caught by the existing API tests; pinned by a
+  regression test.
+
+Prompts move out of f-strings because a prompt change silently changes every
+score produced after it. Versioning them means a stored analysis can say which
+wording produced it.
+
+## Phase 1 — CV analysis, completed ✅
+
+Data flow:
+
+```
+upload / paste
+  → parse_pdf()            unchanged, deterministic ATS facts
+  → extract_profile()      NEW  one Claude call → CvProfile
+  → suggest_fields()       NEW  evidence → fit scored in Python
+  → analyze()              existing, when a target job is present
+```
+
+| | File |
+|---|---|
+| add | `analyst/profile.py` — `CvProfile` (contact, summary, experience, education, skills, certifications, projects, languages) + one `call_structured` extraction |
+| add | `analyst/fields.py` — top matching fields, 0–100 with a justification, **computed in Python from model evidence** |
+| modify | `models/entities.py` — `CvProfile` table (JSON, FK to `resumes`) |
+| modify | `api/resumes.py` — extract on upload; `GET /resumes/{id}/profile`, `GET /resumes/{id}/fields`, `DELETE /resumes/{id}` (row, file, cascade), and accept pasted CV text as well as a file |
+| modify | `frontend/` — `Profile.tsx`, plus `App.tsx` / `api.ts` / `types.ts` |
+
+**Built**, with two deviations worth recording:
+
+- **Extraction is lazy, not on upload.** Upload fires the moment a file is
+  chosen, and extraction is a multi-second Claude call — doing it there freezes
+  the picker before the user has said what they want. The profile is extracted
+  on first request to `/profile` and cached, which costs the same one call.
+- **A pasted CV keeps its own text.** The paste is still rendered to a PDF,
+  because the writing review reads the real document to judge layout. But
+  reading the text *back* out of that PDF loses every glyph the render font
+  cannot draw — for an Arabic CV, all of them. `Resume.source_text` holds the
+  original and is preferred wherever text rather than layout is wanted.
+
+  This is the first place the Arabic problem bites, and it is only half solved:
+  a pasted Arabic CV now extracts correctly, but the PDF generated for the
+  visual review still renders Arabic as blank glyphs, because PyMuPDF's builtin
+  `helv` has no Arabic coverage. Phase 3's font work fixes the render.
+
+## Phase 2 — tailoring and versions ✅
+
+| | File |
+|---|---|
+| add | `analyst/tailor.py` — edits against `CvProfile` + a target job, then a **hard post-validation pass** that rejects any edit introducing a token absent from the original |
+| add | `models/entities.py` → `CvVersion` (name, resume, target job, profile JSON, accepted edit ids) |
+| add | `api/tailor.py`, `frontend/src/Tailor.tsx` — per-edit accept/reject and accept-all |
+
+The no-fabrication rule is enforced twice: in the prompt, and in Python after
+the model returns. The prompt is the request; the validator is the guarantee.
+A missing requirement becomes a listed gap, never a CV addition, and a helpful
+metric becomes a `[add number]` placeholder for the user to fill.
+
+**Built.** The validator grew into its own module, and three things about it
+are worth recording because they are policy, not mechanism:
+
+- **`analyst/provenance.py` is the guarantee.** Every proposed edit is checked
+  for new figures (Arabic-Indic digits normalised first), named things by shape
+  (PostgreSQL, AWS, C++, a capital mid-sentence), terms lifted from the posting,
+  leadership claims, and — after the random search found "fintech" slipping
+  through — *any new noun*. Facts live in nouns; verbs and adverbs are how a fact
+  is told, and pass. A failing edit is shown to the user as *withheld*, with the
+  reason, rather than silently dropped.
+- **Edits are checked against the item they change, not the whole CV.** "8,000
+  merchants" under one role does not license it under another; moving a real
+  achievement to the wrong job is fabrication even though every character of it
+  is "in the CV".
+- **The client sends edit IDs, never text.** A proposal is stored server-side;
+  saving applies the stored edits, then re-checks the finished document as a
+  whole before storing it. There is no request that puts a client's words into a
+  saved CV, and a corrupted stored edit is refused by the backstop (tested).
+
+The acceptance test (`test_tailor_no_fabrication.py`) checks with its *own*
+regexes rather than the validator's, over planted fabrications, 600 seeded
+random proposals across an English and an Arabic CV, and the full API path.
+
+What the validator cannot see, stated rather than hidden: **meaning**. "Helped
+build X" → "Built X" passes, because no new fact enters. Tone is judged by the
+person reading the diff, which is why nothing applies until they accept it.
+And **Arabic is protected more bluntly**: word shape does not separate verbs
+from nouns or mark names, so a new Arabic word must stem-match the edited item
+or be on a short list of common verbs. Safer, and it means Arabic rewrites are
+withheld more often than English ones.
+
+## Phase 3 — export
+
+**Decision: WeasyPrint**, taken 11 Sep 2026.
+
+Arabic needs real shaping and bidi, which `python-docx` and PyMuPDF will not do
+for you. WeasyPrint renders HTML/CSS through Pango, so Arabic comes out shaped
+and correctly ordered, and the text layer stays selectable — which is the whole
+point of an ATS-friendly export. The cost is system libraries (`brew install
+pango gdk-pixbuf libffi`), so the backend stops being pip-only. Accepted.
+
+> Rejected: ReportLab + `arabic-reshaper` + `python-bidi`. Pip-only, but bidi
+> becomes ours to hand-manage and the result is more fragile than Pango's.
+
+One `CvProfile` feeds two renderers — HTML→PDF, and `python-docx` with `w:bidi`
+/ `w:rtl` run properties — so there is one data model and no template drift.
+Needs an OFL-licensed embeddable font: **Noto Naskh Arabic**.
+
+**Placeholders are filled here.** Phase 2 saves `[add number]` slots as they
+are — a version is only ever the original plus checked edits, so there is no
+place in it for text the user types. Export is the step where the user sees the
+final document, so it lists every placeholder left in a version and has each one
+filled with the real figure or removed before rendering. A version with an
+unfilled placeholder is never exported silently.
+
+New dependency: `weasyprint`. `python-docx` is already present.
+
+## Phase 4 — search filters and job-URL analysis
+
+- `ScoutRequest` and `prefilter.rank()` gain `remote`, `seniority`,
+  `posted_within_days`.
+- `from-url` gains company targeting — what the company appears to value, ATS
+  keywords, tone — **every inference labelled as one**. No invented company facts.
+- The UI gains the manual-paste fallback textarea when a fetch fails, which is
+  the documented outcome for a login wall or a JS-rendered page.
+
+## Verification
+
+| Test | Asserts |
+|---|---|
+| `test_safe_fetch.py` | Every vector in the SSRF list above is refused, including after a redirect |
+| `test_profile.py` | Extraction fills the schema; a CV with no text layer fails at the boundary, not in the UI |
+| `test_fields.py` | Fit scores are computed from evidence and are stable across runs |
+| `test_tailor_no_fabrication.py` | **Acceptance criterion.** No tailored CV contains a token absent from the original — property-style over fixtures |
+| `test_export.py` | The PDF has an extractable text layer, the DOCX opens, and an Arabic sample round-trips in both |
+
+No test calls a live API; the model is stubbed throughout, as everywhere else
+in this suite.
+
+---
+
+*The document below predates this plan and is unchanged. It is the design and
+build record for Agent 2, whose sourcing tiers, read-only browser and policy
+layer this roadmap builds on.*
+
+---
+
 # Agent 2 — job discovery browser agent
 
 Revision of the original Agent 2 (email outreach) into a browsing agent that

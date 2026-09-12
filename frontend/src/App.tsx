@@ -1,18 +1,29 @@
 import { useEffect, useState } from 'react';
 import Dashboard from './Dashboard';
+import Profile from './Profile';
 import Scout from './Scout';
-import { createAnalysis, listIndustries, uploadResume } from './api';
+import { TailorButton } from './Tailor';
+import {
+  createAnalysis,
+  deleteResume,
+  listIndustries,
+  uploadResume,
+  uploadResumeText,
+} from './api';
 import type { AnalysisResult, Industry } from './types';
 import './styles.css';
 
-type Mode = 'audit' | 'find';
+type Mode = 'cv' | 'audit' | 'find';
+type Source = 'file' | 'paste';
 
 export default function App() {
-  const [mode, setMode] = useState<Mode>('audit');
+  const [mode, setMode] = useState<Mode>('cv');
   const [industries, setIndustries] = useState<Industry[]>([]);
 
-  // The resume is shared: uploaded once, used by both agents.
+  // The resume is shared: provided once, used by every stage after it.
+  const [source, setSource] = useState<Source>('file');
   const [file, setFile] = useState<File | null>(null);
+  const [cvText, setCvText] = useState('');
   const [resumeId, setResumeId] = useState<string | null>(null);
   const [resumeName, setResumeName] = useState('');
 
@@ -40,11 +51,51 @@ export default function App() {
     return uploaded.id;
   }
 
-  async function onFile(chosen: File | null) {
-    setFile(chosen);
-    setResumeId(null);      // a new file invalidates the old analysis
+  function clearDerived() {
+    setResumeId(null);
     setResult(null);
     setError(null);
+  }
+
+  async function onPaste() {
+    if (cvText.trim().length < 100) {
+      setError('Paste the whole CV \u2014 that is too short to read.');
+      return;
+    }
+    clearDerived();
+    try {
+      setWorking('Reading the pasted CV');
+      const uploaded = await uploadResumeText(cvText);
+      setResumeId(uploaded.id);
+      setResumeName('pasted CV');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not read that text.');
+    } finally {
+      setWorking(null);
+    }
+  }
+
+  /* A CV is personal data, so removing it removes the file and everything
+     derived from it, not just the reference held here. */
+  async function onDelete() {
+    if (!resumeId) return;
+    try {
+      setWorking('Deleting');
+      await deleteResume(resumeId);
+      setFile(null);
+      setCvText('');
+      setResumeName('');
+      clearDerived();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not delete that CV.');
+    } finally {
+      setWorking(null);
+    }
+  }
+
+  async function onFile(chosen: File | null) {
+    setFile(chosen);
+    clearDerived();          // a new file invalidates the old analysis
     if (!chosen) return;
     try {
       setWorking('Uploading resume');
@@ -91,21 +142,68 @@ export default function App() {
         </p>
       </header>
 
-      <label style={{ marginTop: '1.75rem' }}>
-        <span className="label-text">Resume — PDF or DOCX</span>
-        <input
-          type="file"
-          accept=".pdf,.docx,application/pdf"
-          onChange={(e) => onFile(e.target.files?.[0] ?? null)}
-        />
-      </label>
+      <div className="modes" role="tablist" style={{ marginTop: '1.75rem' }}>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={source === 'file'}
+          onClick={() => setSource('file')}
+        >
+          Upload a file
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={source === 'paste'}
+          onClick={() => setSource('paste')}
+        >
+          Paste the text
+        </button>
+      </div>
+
+      {source === 'file' ? (
+        <label style={{ marginTop: '1rem' }}>
+          <span className="label-text">Resume — PDF or DOCX</span>
+          <input
+            type="file"
+            accept=".pdf,.docx,application/pdf"
+            onChange={(e) => onFile(e.target.files?.[0] ?? null)}
+          />
+        </label>
+      ) : (
+        <div className="paste-panel" style={{ marginTop: '1rem' }}>
+          <label>
+            <span className="label-text">Paste your CV</span>
+            <textarea
+              value={cvText}
+              placeholder="Paste the whole CV, including dates and bullet points."
+              onChange={(e) => setCvText(e.target.value)}
+            />
+          </label>
+          <button type="button" onClick={onPaste} disabled={!!working}>
+            Use this text
+          </button>
+        </div>
+      )}
+
       {resumeId && (
         <p className="note" style={{ marginTop: '0.625rem' }}>
-          Using <strong>{resumeName}</strong> for both the audit and the search.
+          Using <strong>{resumeName}</strong> for every stage below.{' '}
+          <button type="button" className="ledger-more" onClick={onDelete}>
+            Delete it and everything derived from it
+          </button>
         </p>
       )}
 
       <div className="modes" role="tablist">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={mode === 'cv'}
+          onClick={() => setMode('cv')}
+        >
+          Read my CV
+        </button>
         <button
           type="button"
           role="tab"
@@ -124,7 +222,9 @@ export default function App() {
         </button>
       </div>
 
-      {mode === 'audit' ? (
+      {mode === 'cv' ? (
+        <Profile key={resumeId ?? 'none'} resumeId={resumeId} />
+      ) : mode === 'audit' ? (
         <>
           <form className="form" onSubmit={runAudit} style={{ marginTop: '2rem' }}>
             <div className="row">
@@ -181,6 +281,22 @@ export default function App() {
           </form>
 
           {result && <Dashboard result={result} />}
+          {result && (
+            <TailorButton
+              key={`${jobTitle}|${jobDescription.length}|${result.overall_score}`}
+              resumeId={resumeId}
+              target={{
+                job: {
+                  title: jobTitle,
+                  company: '',
+                  location: '',
+                  description: jobDescription,
+                  apply_url: '',
+                  source: 'audit',
+                },
+              }}
+            />
+          )}
         </>
       ) : (
         <Scout resumeId={resumeId} />

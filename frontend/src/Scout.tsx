@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { findJobs, jobFromUrl, scoreJobs } from './api';
+import { TailorButton } from './Tailor';
 import type { FindResponse, PastedJob, ScoreResponse, ScoutCandidate } from './types';
 
 /* The two steps are deliberately separate in the UI as well as the API.
@@ -176,6 +177,20 @@ export default function Scout({ resumeId }: { resumeId: string | null }) {
           <p className="q" style={{ marginTop: '0.75rem' }}>
             read via {pasted.source}
           </p>
+          <TailorButton
+            key={pasted.apply_url}
+            resumeId={resumeId}
+            target={{
+              job: {
+                title: pasted.title,
+                company: pasted.company,
+                location: pasted.location,
+                description: pasted.description,
+                apply_url: pasted.apply_url,
+                source: pasted.source,
+              },
+            }}
+          />
         </article>
       )}
 
@@ -373,6 +388,9 @@ export default function Scout({ resumeId }: { resumeId: string | null }) {
                     </span>
                   ))}
                 </div>
+              )}
+              {line.id && (
+                <TailorButton key={line.id} resumeId={resumeId} target={{ scoutJobId: line.id }} />
               )}
             </article>
           ))}

@@ -21,6 +21,7 @@ import logging
 
 import httpx
 
+from app.core.safe_fetch import BlockedAddress, safe_get
 from app.sources.base import JobPosting
 
 from .browser import Page, ReadOnlyBrowser
@@ -40,17 +41,20 @@ class IntakeError(RuntimeError):
 
 
 def _plain_get(url: str) -> str:
-    try:
-        with httpx.Client(
-            timeout=TIMEOUT,
-            headers={"User-Agent": USER_AGENT, "Accept-Language": "en,ar;q=0.8"},
-            follow_redirects=True,
-        ) as client:
-            response = client.get(url)
-        return response.text if response.status_code == 200 else ""
-    except httpx.HTTPError as exc:
-        log.info("plain fetch failed for %s: %s", url, exc)
+    """Fetch the page, refusing any hop that lands on a private address.
+
+    `safe_get` follows redirects by hand so the destination is checked again at
+    every hop. A public URL that redirects to 169.254.169.254 is the whole point
+    of that: the policy gate only ever saw the URL the user pasted.
+    """
+    response = safe_get(
+        url,
+        headers={"User-Agent": USER_AGENT, "Accept-Language": "en,ar;q=0.8"},
+        timeout=TIMEOUT,
+    )
+    if response is None:
         return ""
+    return response.text if response.status_code == 200 else ""
 
 
 def fetch_one(
@@ -112,6 +116,11 @@ def fetch_one(
 
 def describe_failure(exc: Exception) -> str:
     """Turn an intake failure into something a person can act on."""
+    if isinstance(exc, BlockedAddress):
+        return (
+            f"{exc} That link redirected somewhere on a private network, which "
+            "this app will not follow."
+        )
     if isinstance(exc, PolicyViolation):
         return (
             f"{exc} A link to one specific role usually works; a search or "

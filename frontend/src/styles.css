@@ -421,3 +421,125 @@ td a:hover { text-decoration-color: var(--blueprint); }
   padding: 1.25rem;
   background: var(--card);
 }
+
+/* --- Feature 1: the CV read into sections ------------------------------- */
+
+.profile { margin-top: 2rem; }
+.profile h3 {
+  font-size: 0.8125rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-3);
+  margin: 2rem 0 0.875rem;
+}
+
+.entities section { margin-bottom: 1.75rem; }
+.entities h4 {
+  font-size: 0.875rem;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+  color: var(--ink-2);
+}
+.entities ul { margin: 0.5rem 0 0 1.1rem; }
+.entities li { margin-bottom: 0.25rem; line-height: 1.5; }
+
+/* A two-column key/value list. Distinct from .facts, which is a flex row of
+   short monospace chips and does not lay dt/dd pairs out at all. */
+.contact-facts {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.3rem 1.25rem;
+  font-size: 0.875rem;
+  margin: 0;
+}
+.contact-facts dt { color: var(--ink-3); }
+.contact-facts dd { margin: 0; }
+
+.field-fits .finding { margin-bottom: 1rem; }
+.field-fits .bars { margin-top: 0.875rem; }
+.field-fits .note { margin-top: 0.25rem; }
+
+/* The 'show the arithmetic' toggle reuses .ledger-more, which is a button
+   elsewhere too -- make sure it reads as one wherever it appears. */
+button.ledger-more {
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  font: inherit;
+  color: var(--ink-3);
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+button.ledger-more:hover { color: var(--ink); }
+
+/* --- Tailoring ------------------------------------------------------------- */
+
+.tailor {
+  margin-top: 1.5rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--rule);
+}
+.tailor-head { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; }
+.tailor h4 { font-size: 0.875rem; font-weight: 600; margin: 1.75rem 0 0.5rem; color: var(--ink-2); }
+.tailor-launch { margin-top: 0.875rem; }
+
+/* One redline, struck and inserted runs in place. */
+.diff-inline {
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  line-height: 1.7;
+  margin: 0.75rem 0;
+  padding: 0.5rem 0.625rem;
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--ink) 3%, transparent);
+  white-space: pre-wrap;
+}
+.diff-inline del {
+  background: color-mix(in srgb, var(--critical) 12%, transparent);
+  text-decoration-color: color-mix(in srgb, var(--critical) 60%, transparent);
+  color: var(--ink-2);
+}
+.diff-inline ins {
+  background: color-mix(in srgb, var(--earned) 16%, transparent);
+  text-decoration: none;
+  color: var(--ink);
+}
+
+/* A placeholder must not be sent to an employer by accident. */
+mark.placeholder {
+  background: color-mix(in srgb, var(--major) 28%, transparent);
+  color: var(--ink);
+  font-weight: 600;
+  padding: 0 0.15em;
+  border-radius: 3px;
+}
+
+/* Reorders read as two numbered lists; moved items carry the weight. */
+ol.diff-side { margin: 0; padding-left: 1.6rem; text-decoration: none; }
+ol.diff-side li { margin-bottom: 0.2rem; }
+ol.diff-side li.moved { font-weight: 600; }
+
+.actions button[aria-pressed='true'] {
+  background: var(--ink);
+  color: var(--card);
+  border-color: var(--ink);
+}
+
+.gaps { margin: 0.5rem 0 0 1.1rem; }
+.gaps li { margin-bottom: 0.5rem; line-height: 1.5; }
+
+.withheld { margin-top: 1.5rem; }
+.withheld ul { margin: 0.75rem 0 0 1.1rem; }
+.withheld li { margin-bottom: 0.625rem; }
+
+.save-version {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.75rem;
+  margin-top: 1.5rem;
+}
+.save-version label { flex: 1 1 16rem; }
+
+.versions .entities { margin-top: 1rem; }

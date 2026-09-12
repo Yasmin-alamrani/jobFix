@@ -4,8 +4,13 @@ This is the safety layer, and it is deliberately separate from the agent that
 uses it. Every rule here is enforced before a request is made, so no prompt --
 including one injected into a job posting -- can talk the agent past it.
 
-Three independent gates, all of which must pass:
+Four independent gates, all of which must pass:
 
+  0. The URL does not point at a private address. This runs first and offline:
+     it inspects the URL rather than resolving it, because a gate that does DNS
+     cannot be called freely. The matching resolve-time check -- for a *name*
+     that points somewhere private -- lives in `core.safe_fetch.safe_get`, on
+     the fetch itself, where it also re-checks after every redirect.
   1. The host is on the allowlist.
   2. The path is not one the site's robots.txt disallows, and not one of our
      own hard-blocked patterns.
@@ -27,6 +32,8 @@ from dataclasses import dataclass, field
 from urllib.parse import urlparse
 
 import httpx
+
+from app.core.safe_fetch import BlockedAddress, assert_public_literal
 
 log = logging.getLogger(__name__)
 
@@ -201,6 +208,13 @@ class Policy:
         """Raise PolicyViolation unless every gate passes."""
         if not url.lower().startswith(("http://", "https://")):
             raise PolicyViolation(f"Only http(s) URLs may be fetched: {url!r}")
+        # Gate 0. Before the allowlist, because `for_pasted_url` builds the
+        # allowlist *from the URL* -- the host gate cannot refuse an address the
+        # user pasted, so something ahead of it has to.
+        try:
+            assert_public_literal(url)
+        except BlockedAddress as exc:
+            raise PolicyViolation(str(exc)) from exc
         if not self.host_allowed(url):
             raise PolicyViolation(f"{host_of(url)!r} is not on the allowlist.")
         if self.hard_blocked(url):

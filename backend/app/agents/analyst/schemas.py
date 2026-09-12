@@ -129,3 +129,6 @@ class AnalysisResult(BaseModel):
     writing: WritingReview
     top_fixes: list[Deduction]
     parse_facts: dict
+    # Which prompt wording produced the evidence behind this score. Empty when
+    # no model call was made (an unreadable document is scored deterministically).
+    prompt_version: str = ""

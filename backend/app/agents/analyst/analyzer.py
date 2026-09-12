@@ -10,6 +10,10 @@ Two model calls, deliberately split by what they need to see:
 Neither call returns a score. They return evidence; `scoring.py` does the
 arithmetic. That is what keeps the number reproducible and every deduction
 traceable to a quoted span.
+
+The prompts themselves live in `app/prompts/analyst_v1.py` and are versioned,
+because a change to their wording changes the evidence and therefore every
+score produced afterwards. The version is recorded on each result.
 """
 from __future__ import annotations
 
@@ -19,9 +23,9 @@ from pathlib import Path
 from pydantic import BaseModel
 
 from app.core.claude import get_claude, pdf_block, text_block
+from app.prompts import analyst_v1, data_block
 
 from . import scoring
-from .industries import prompt_fragment
 from .parser import ParseReport, parse_pdf
 from .schemas import (
     AnalysisResult,
@@ -36,89 +40,12 @@ from .schemas import (
 
 log = logging.getLogger(__name__)
 
-# The single most important instruction in this application. A resume tool that
-# invents experience produces a candidate who cannot answer for their own CV in
-# an interview, and that is a worse outcome than a low score.
-NO_FABRICATION = """
-ABSOLUTE CONSTRAINT -- never violate this, whatever else is asked of you:
-You must never invent, embellish, or imply experience the resume does not
-already evidence. Specifically, you must not introduce an employer, job title,
-date, degree, certification, tool, metric, or achievement that is not already
-present in the resume text.
-
-When a requirement is absent, say it is absent. A genuine gap, named plainly,
-is useful to the candidate. A fabricated qualification is not -- they will be
-asked about it in an interview and will not be able to answer.
-
-Rewrites may only rephrase, quantify what is already stated, reorder, or align
-existing wording with the job description's vocabulary.
-""".strip()
-
 
 class _MatchCall(BaseModel):
     """Combined result of call A -- both halves reason over the same context."""
 
     requirements: list[Requirement]
     experience: ExperienceFit
-
-
-def _match_system(industry: str) -> str:
-    return f"""You are an experienced technical recruiter screening a resume against a
-specific job description for the Saudi Arabian market.
-
-{prompt_fragment(industry)}
-
-{NO_FABRICATION}
-
-Your task has two parts.
-
-1. Extract every distinct requirement from the job description. Mark each
-   `critical` if the posting states it as required, essential, or a must-have;
-   `preferred` otherwise. Then judge each against the resume:
-     - `present`: the resume gives direct, specific evidence. Quote it verbatim
-       in `evidence`.
-     - `weak`: the resume implies it or shows something adjacent, but does not
-       demonstrate it. Quote the closest evidence.
-     - `missing`: no evidence at all. Leave `evidence` empty.
-   Do not merge distinct requirements, and do not invent requirements the
-   posting does not state.
-
-2. Assess seniority fit. Use `years_evidenced` from actual dates in the resume;
-   leave it null rather than guessing. Back the assessment with verbatim quotes.
-
-Be accurate rather than generous. An inflated assessment costs the candidate a
-real interview."""
-
-
-def _writing_system(industry: str, report: ParseReport) -> str:
-    bilingual = (
-        "\nThis resume contains Arabic. Assess it on its own terms -- do not treat "
-        "a non-English resume as a defect, and keep suggested text in the language "
-        "of the span you are replacing."
-        if report.is_bilingual or report.primary_language == "ar"
-        else ""
-    )
-    return f"""You are reviewing the writing and visual structure of a resume for the
-Saudi Arabian market. You can see the actual document, so judge layout,
-hierarchy and readability as rendered.
-
-{prompt_fragment(industry)}
-
-{NO_FABRICATION}
-
-Report concrete, actionable issues. For each, quote the current text verbatim
-in `original` and give the replacement in `suggested`. Prefer weak, unquantified
-bullets ("responsible for X") that can be sharpened using numbers already
-present elsewhere in the resume.
-
-Severity: `critical` if it would cost an interview, `major` if it visibly
-weakens the application, `minor` for polish. Report at most 12 issues, best
-first. If the resume is genuinely strong, return few issues -- do not invent
-problems to seem thorough.
-
-Resume conventions here follow international standards. Do NOT suggest adding a
-photograph, national ID, Iqama number, date of birth, marital status or
-nationality; none of these belong on a modern CV.{bilingual}"""
 
 
 def analyze(
@@ -144,23 +71,28 @@ def analyze(
     role = f"Target role: {job_title}\n\n" if job_title else ""
     match = claude.call_structured(
         schema=_MatchCall,
-        system=_match_system(industry),
+        system=analyst_v1.match_system(industry),
         content=[
             text_block(
-                f"{role}JOB DESCRIPTION\n---\n{job_description}\n---\n\n"
-                f"RESUME TEXT\n---\n{report.text}\n---"
+                role
+                + data_block("job_description", job_description)
+                + "\n\n"
+                + data_block("resume_text", report.text)
             )
         ],
     )
 
     writing = claude.call_structured(
         schema=WritingReview,
-        system=_writing_system(industry, report),
+        system=analyst_v1.writing_system(
+            industry,
+            bilingual=report.is_bilingual or report.primary_language == "ar",
+        ),
         content=[
             pdf_block(resume_path),
             text_block(
                 "Review the resume above against this job description.\n\n"
-                f"JOB DESCRIPTION\n---\n{job_description}\n---"
+                + data_block("job_description", job_description)
             ),
         ],
     )
@@ -180,6 +112,7 @@ def analyze(
         writing=writing,
         top_fixes=scoring.top_fixes(subs),
         parse_facts=_facts(report),
+        prompt_version=analyst_v1.VERSION,
     )
 
 

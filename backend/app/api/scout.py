@@ -18,10 +18,12 @@ from app.agents.scout import brief as brief_mod
 from app.agents.scout.intake import IntakeError, describe_failure, fetch_one
 from app.agents.scout.llm import OpenRouter, OpenRouterError
 from app.agents.scout.policy import PolicyViolation, WallEncountered
+from app.core.safe_fetch import BlockedAddress
 from app.agents.scout.matcher import match_all
 from app.agents.scout.prefilter import rank
 from app.agents.scout.runner import ScoutRequest, collect
 from app.core.config import get_settings
+from app.core.ratelimit import fetch_limit, scoring_limit
 from app.models.db import get_db
 from app.models.entities import Resume
 from pathlib import Path
@@ -69,6 +71,9 @@ class ScoreRequest(BaseModel):
 
 
 class LineOut(BaseModel):
+    # The search result this line scores, so tailoring can resolve the posting
+    # from the server's cache instead of the client sending it back.
+    id: str = ""
     score: float
     title: str
     company: str
@@ -110,7 +115,7 @@ def _resume_text(db: Session, resume_id: str) -> str:
     return report.text
 
 
-@router.post("/find", response_model=FindResponse)
+@router.post("/find", response_model=FindResponse, dependencies=[Depends(fetch_limit)])
 def find(request: FindRequest, db: Session = Depends(get_db)) -> FindResponse:
     """Scan sources and rank against the CV. Free -- no model call."""
     settings = get_settings()
@@ -154,7 +159,7 @@ def find(request: FindRequest, db: Session = Depends(get_db)) -> FindResponse:
     )
 
 
-@router.post("/score", response_model=ScoreResponse)
+@router.post("/score", response_model=ScoreResponse, dependencies=[Depends(scoring_limit)])
 def score(request: ScoreRequest, db: Session = Depends(get_db)) -> ScoreResponse:
     """Score the chosen shortlist with the model. This is the part that costs."""
     settings = get_settings()
@@ -196,6 +201,7 @@ def score(request: ScoreRequest, db: Session = Depends(get_db)) -> ScoreResponse
         )
         lines.append(
             LineOut(
+                id=match.job.dedupe_key if match else "",
                 score=line.score, title=line.title, company=line.company,
                 location=line.location, why=line.why, gap=line.gap,
                 url=line.url, publisher=line.publisher,
@@ -232,7 +238,7 @@ class FromUrlResponse(BaseModel):
     missing: list[str] = Field(default_factory=list)
 
 
-@router.post("/from-url", response_model=FromUrlResponse)
+@router.post("/from-url", response_model=FromUrlResponse, dependencies=[Depends(fetch_limit)])
 def from_url(request: FromUrlRequest, db: Session = Depends(get_db)) -> FromUrlResponse:
     """Read one job posting the user pasted, and optionally score it.
 
@@ -249,7 +255,7 @@ def from_url(request: FromUrlRequest, db: Session = Depends(get_db)) -> FromUrlR
 
     try:
         job = fetch_one(request.url.strip(), client=model)
-    except (PolicyViolation, WallEncountered, IntakeError) as exc:
+    except (BlockedAddress, PolicyViolation, WallEncountered, IntakeError) as exc:
         raise HTTPException(422, describe_failure(exc)) from exc
     except Exception as exc:  # noqa: BLE001
         log.exception("intake failed for %s", request.url)

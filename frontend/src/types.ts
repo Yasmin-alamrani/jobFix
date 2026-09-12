@@ -79,6 +79,7 @@ export interface FindResponse {
 }
 
 export interface ScoredLine {
+  id: string;
   score: number;
   title: string;
   company: string;
@@ -111,4 +112,155 @@ export interface PastedJob {
   gap: string;
   matched: string[];
   missing: string[];
+}
+
+// --- Feature 1: the CV as structured entities -------------------------------
+
+export interface CvContact {
+  name: string;
+  email: string;
+  phone: string;
+  location: string;
+  links: string[];
+}
+
+export interface CvExperience {
+  title: string;
+  company: string;
+  location: string;
+  start: string;
+  end: string;
+  start_year: number | null;
+  end_year: number | null;
+  current: boolean;
+  bullets: string[];
+}
+
+export interface CvEducation {
+  degree: string;
+  field_of_study: string;
+  institution: string;
+  location: string;
+  start: string;
+  end: string;
+  end_year: number | null;
+  grade: string;
+}
+
+export interface CvCertification { name: string; issuer: string; year: string; }
+export interface CvProject {
+  name: string;
+  description: string;
+  technologies: string[];
+  link: string;
+}
+export interface CvLanguage { name: string; proficiency: string; }
+
+export interface CvProfile {
+  is_resume: boolean;
+  contact: CvContact;
+  summary: string;
+  experience: CvExperience[];
+  education: CvEducation[];
+  skills: string[];
+  certifications: CvCertification[];
+  projects: CvProject[];
+  languages: CvLanguage[];
+}
+
+export interface ProfileResponse {
+  resume_id: string;
+  profile: CvProfile;
+  prompt_version: string;
+  sections_present: string[];
+  sections_missing: string[];
+}
+
+export interface FieldComponent {
+  key: string;
+  label: string;
+  earned: number;
+  max_points: number;
+  why: string;
+}
+
+export interface FieldFit {
+  key: string;
+  label: string;
+  score: number;
+  components: FieldComponent[];
+  matched_skills: string[];
+  missing_skills: string[];
+  years_in_field: number | null;
+  title_alignment: 'direct' | 'adjacent' | 'distant' | string;
+  justification: string;
+}
+
+// --- Tailoring and saved versions ------------------------------------------
+
+export interface JobIn {
+  title: string;
+  company: string;
+  location: string;
+  description: string;
+  apply_url: string;
+  source: string;
+}
+
+/* A search result is named by ID and resolved from the server's cache; a pasted
+   or audited posting travels as fields. */
+export type TailorTarget = { scoutJobId: string } | { job: JobIn };
+
+export interface DiffOp {
+  op: 'equal' | 'insert' | 'delete';
+  text: string;
+}
+
+export interface TailorEdit {
+  id: string;
+  kind: 'rewrite' | 'reorder' | 'add_skill';
+  target: string;
+  label: string;
+  before_text: string;
+  after_text: string;
+  before_items: string[];
+  after_items: string[];
+  order: number[];
+  diff: DiffOp[];
+  evidence: string;
+  why: string;
+  requirement: string;
+  has_placeholder: boolean;
+  violations: string[];
+}
+
+export interface TailorGap {
+  requirement: string;
+  importance: 'critical' | 'preferred';
+  advice: string;
+}
+
+export interface TailorProposal {
+  proposal_id: string;
+  job_id: string;
+  job_title: string;
+  company: string;
+  edits: TailorEdit[];
+  blocked: TailorEdit[];
+  gaps: TailorGap[];
+  prompt_version: string;
+}
+
+export interface CvVersion {
+  id: string;
+  name: string;
+  resume_id: string;
+  job_id: string | null;
+  job_title: string;
+  company: string;
+  is_original: boolean;
+  accepted_edit_ids: string[];
+  placeholders: number;
+  created_at: string;
+  profile: CvProfile;
 }
