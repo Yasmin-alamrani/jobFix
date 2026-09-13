@@ -543,3 +543,37 @@ ol.diff-side li.moved { font-weight: 600; }
 .save-version label { flex: 1 1 16rem; }
 
 .versions .entities { margin-top: 1rem; }
+
+/* --- Export ---------------------------------------------------------------- */
+
+.export-row { flex-wrap: wrap; margin-top: 0.75rem; }
+.placeholder-form { margin-top: 1rem; }
+.placeholder-form ol { margin: 0.75rem 0 1rem 1.2rem; }
+.slot { margin-bottom: 1.25rem; }
+.slot-text { font-family: var(--mono); font-size: 0.75rem; margin: 0.25rem 0 0.5rem; }
+.slot label { display: block; margin-top: 0.4rem; }
+
+/* --- Search filters and job-link analysis ---------------------------------- */
+
+.filters { margin-top: 0.5rem; }
+.levels { border: 0; padding: 0; margin: 0.75rem 0 0; display: flex; flex-wrap: wrap; gap: 0.35rem 1rem; }
+.levels legend { margin-bottom: 0.35rem; width: 100%; }
+.check-inline { display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.875rem; }
+
+.breakdown {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  gap: 1rem 2rem;
+  margin: 0.5rem 0 1.25rem;
+}
+.breakdown h4 { font-size: 0.875rem; font-weight: 600; margin-bottom: 0.5rem; }
+.breakdown-group { margin-bottom: 0.625rem; }
+.breakdown-group .chips { margin-top: 0.25rem; }
+
+.targeting h4 { font-size: 0.875rem; font-weight: 600; margin: 1.25rem 0 0.4rem; color: var(--ink-2); }
+.signals { margin: 0 0 0 1.1rem; }
+.signals li { margin-bottom: 0.5rem; line-height: 1.5; }
+.signals .quote { display: block; font-family: var(--mono); font-size: 0.75rem; color: var(--ink-3); margin-top: 0.15rem; }
+.signals .why { color: var(--ink-2); }
+.pill.stated { color: var(--earned); }
+.pill.inferred { color: var(--ink-3); font-style: italic; }

@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import resumes, scout, tailor
+from app.api import export, jobs, resumes, scout, tailor
 from app.core.config import get_settings
 from app.models.db import init_db
 
@@ -29,11 +29,15 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    # The browser downloads exports with fetch, and needs to read the filename.
+    expose_headers=["Content-Disposition"],
 )
 
 app.include_router(resumes.router)
 app.include_router(scout.router)
 app.include_router(tailor.router)
+app.include_router(export.router)
+app.include_router(jobs.router)
 
 
 @app.get("/api/health")

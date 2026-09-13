@@ -8,6 +8,8 @@ nobody wanted.
 from __future__ import annotations
 
 import logging
+from datetime import datetime
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
@@ -15,6 +17,7 @@ from sqlalchemy.orm import Session
 
 from app.agents.analyst.parser import parse_pdf
 from app.agents.scout import brief as brief_mod
+from app.agents.scout import filters as job_filters
 from app.agents.scout.intake import IntakeError, describe_failure, fetch_one
 from app.agents.scout.llm import OpenRouter, OpenRouterError
 from app.agents.scout.policy import PolicyViolation, WallEncountered
@@ -43,6 +46,13 @@ class FindRequest(BaseModel):
     include_jsearch: bool = False
     linkedin_only: bool = False
     jsearch_query: str = ""
+    # Filters. A value a posting does not state is "unknown"; whether those are
+    # kept is the user's call, and what each filter hid is counted in the reply.
+    work_mode: Literal["any", "remote", "hybrid", "onsite"] = "any"
+    seniority: list[Literal["intern", "junior", "mid", "senior", "lead"]] = Field(
+        default_factory=list)
+    posted_within_days: int | None = Field(default=None, ge=1, le=365)
+    include_unstated: bool = True
 
 
 class CandidateOut(BaseModel):
@@ -56,12 +66,19 @@ class CandidateOut(BaseModel):
     source: str
     publisher: str = ""
     remote: bool = False
+    # Read from the posting: seniority from title words, the arrangement from
+    # its flags and location, the date as published. "unknown" when unstated.
+    seniority: str = "unknown"
+    work_mode: str = "unknown"
+    posted_at: datetime | None = None
 
 
 class FindResponse(BaseModel):
     total_found: int
     by_source: dict[str, int]
     candidates: list[CandidateOut]
+    # reason -> how many postings the filters hid for it.
+    hidden: dict[str, int] = Field(default_factory=dict)
 
 
 class ScoreRequest(BaseModel):
@@ -84,6 +101,9 @@ class LineOut(BaseModel):
     publisher: str = ""
     matched: list[str] = Field(default_factory=list)
     missing: list[str] = Field(default_factory=list)
+    seniority: str = "unknown"
+    work_mode: str = "unknown"
+    posted_at: datetime | None = None
 
 
 class ScoreResponse(BaseModel):
@@ -132,8 +152,14 @@ def find(request: FindRequest, db: Session = Depends(get_db)) -> FindResponse:
     )
 
     jobs = collect(scout_request, jsearch_key=settings.jsearch_api_key)
+    filtered = job_filters.apply(jobs, job_filters.Filters(
+        work_mode=request.work_mode,
+        seniority=frozenset(request.seniority),
+        posted_within_days=request.posted_within_days,
+        include_unstated=request.include_unstated,
+    ))
     candidates = rank(
-        resume_text, jobs,
+        resume_text, filtered.kept,
         locations=scout_request.locations or None,
         title_hint=request.title_hint,
     )
@@ -147,12 +173,16 @@ def find(request: FindRequest, db: Session = Depends(get_db)) -> FindResponse:
     return FindResponse(
         total_found=len(jobs),
         by_source=by_source,
+        hidden=dict(filtered.hidden),
         candidates=[
             CandidateOut(
                 id=c.job.dedupe_key, title=c.job.title, company=c.job.company,
                 location=c.job.location, similarity=c.similarity,
                 overlap=list(c.overlap), apply_url=c.job.apply_url,
                 source=c.job.source, publisher=c.job.publisher, remote=c.job.remote,
+                seniority=job_filters.seniority_of(c.job.title),
+                work_mode=job_filters.work_mode_of(c.job),
+                posted_at=c.job.posted_at,
             )
             for c in candidates
         ],
@@ -207,6 +237,9 @@ def score(request: ScoreRequest, db: Session = Depends(get_db)) -> ScoreResponse
                 url=line.url, publisher=line.publisher,
                 matched=match.matched if match else [],
                 missing=match.missing_critical if match else [],
+                seniority=job_filters.seniority_of(line.title),
+                work_mode=job_filters.work_mode_of(match.job) if match else "unknown",
+                posted_at=match.job.posted_at if match else None,
             )
         )
 

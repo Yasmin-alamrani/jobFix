@@ -148,6 +148,8 @@ GUARDED = {
     ("POST", "/api/scout/score"),
     ("POST", "/api/scout/from-url"),
     ("POST", "/api/tailor"),
+    ("POST", "/api/jobs/fetch"),
+    ("POST", "/api/jobs/targeting"),
 }
 
 

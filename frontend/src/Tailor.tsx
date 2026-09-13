@@ -10,7 +10,7 @@ const IS_PLACEHOLDER = /^\[add [^[\]\n]{1,40}\]$/i;
 /* A placeholder is the one thing an edit may add that the CV does not say: a
    slot for the user's own real figure. It is highlighted so it cannot be sent
    to an employer by accident. */
-function Filled({ text }: { text: string }) {
+export function Filled({ text }: { text: string }) {
   return (
     <>
       {text.split(PLACEHOLDER_SPLIT).map((part, i) =>

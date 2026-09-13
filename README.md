@@ -19,9 +19,23 @@ The agent is also constrained never to invent experience. A missing skill is rep
 
 ## Run it
 
+PDF export renders through WeasyPrint, which needs the Pango library from the
+system. On macOS:
+
 ```bash
-cd backend && python3 -m venv .venv && ./.venv/bin/pip install -r requirements.txt
+brew install pango
 ```
+
+Then the Python side:
+
+```bash
+cd backend && python3 -m venv .venv && ./.venv/bin/python -m pip install -r requirements.txt
+```
+
+Commands here call tools through `python -m` rather than `./.venv/bin/<tool>`.
+A venv's scripts hard-code the path it was created at, so moving the project
+folder breaks every one of them with "bad interpreter" — while `python` itself,
+a symlink, keeps working.
 
 Add your keys:
 
@@ -41,7 +55,7 @@ boards only, and the "Also search Google for Jobs" checkbox does nothing.
 Start the API:
 
 ```bash
-cd backend && PYTHONPATH=. ./.venv/bin/uvicorn app.main:app --port 8000 --reload
+cd backend && PYTHONPATH=. ./.venv/bin/python -m uvicorn app.main:app --port 8000 --reload
 ```
 
 Start the UI in a second terminal:

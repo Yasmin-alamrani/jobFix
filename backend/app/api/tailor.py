@@ -244,6 +244,15 @@ def save_version(
             "not saved. Nothing was changed.",
         )
 
+    # Where each rewritten item came from, addressed by its position in the
+    # tailored CV (reorders have moved things), so a placeholder can later be
+    # dropped by putting the original sentence back.
+    accepted = set(request.accepted_ids)
+    before_of = {e.after_text: e.before_text for e in edits
+                 if e.kind == "rewrite" and e.id in accepted}
+    origins = {target: before_of[text] for target, _, text in tailor.editable_texts(tailored)
+               if text in before_of}
+
     default_name = " — ".join(x for x in (job.title if job else "", job.company if job else "") if x)
     row = CvVersion(
         user_id=proposal.user_id, resume_id=proposal.resume_id,
@@ -252,6 +261,7 @@ def save_version(
         job_title=job.title if job else "", company=job.company if job else "",
         is_original=False, profile=tailored.model_dump(mode="json"),
         accepted_edit_ids=sorted(set(request.accepted_ids)),
+        rewrite_origins=origins,
     )
     db.add(row)
     db.commit()

@@ -10,6 +10,51 @@ import type { FindResponse, PastedJob, ScoreResponse, ScoutCandidate } from './t
 
 const DEFAULT_SHORTLIST = 8;
 
+const LEVELS = ['intern', 'junior', 'mid', 'senior', 'lead'] as const;
+const LEVEL_LABEL: Record<string, string> = {
+  intern: 'Intern',
+  junior: 'Junior',
+  mid: 'Mid-level',
+  senior: 'Senior',
+  lead: 'Lead / manager',
+};
+
+const HIDDEN_LABEL: Record<string, string> = {
+  work_mode: 'with another work arrangement',
+  work_mode_unstated: 'that state no work arrangement',
+  seniority: 'at another level',
+  seniority_unstated: 'whose title states no level',
+  posted: 'posted earlier',
+  posted_unstated: 'with no posting date',
+};
+
+/* What filters removed, and why -- so a short list reads as "the filters
+   hid 40" rather than "there are only 6 jobs". */
+function hiddenSummary(hidden: Record<string, number>): string {
+  const parts = Object.entries(hidden)
+    .filter(([, n]) => n > 0)
+    .map(([reason, n]) => `${n} ${HIDDEN_LABEL[reason] ?? reason}`);
+  return parts.length ? `Filters hid ${parts.join(', ')}.` : '';
+}
+
+function postedLabel(iso: string | null): string {
+  if (!iso) return 'date not stated';
+  const days = Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000);
+  if (days <= 0) return 'posted today';
+  if (days === 1) return 'posted yesterday';
+  if (days < 14) return `posted ${days} days ago`;
+  if (days < 60) return `posted ${Math.round(days / 7)} weeks ago`;
+  return `posted ${Math.round(days / 30)} months ago`;
+}
+
+/* Level is read from title words, so it is shown as read, not as fact. */
+function metaLine(seniority: string, workMode: string, postedAt: string | null): string {
+  const level =
+    seniority === 'unknown' ? 'level not stated' : `${LEVEL_LABEL[seniority] ?? seniority} (from title)`;
+  const mode = workMode === 'unknown' ? 'arrangement not stated' : workMode;
+  return [level, mode, postedLabel(postedAt)].join(' · ');
+}
+
 function Bar({ value, max }: { value: number; max: number }) {
   /* Relative only. The raw cosine similarity is meaningless as an absolute
      number — 0.085 is a strong match in this corpus — so showing it as a score
@@ -27,6 +72,10 @@ export default function Scout({ resumeId }: { resumeId: string | null }) {
   const [locations, setLocations] = useState('saudi, riyadh');
   const [linkedinOnly, setLinkedinOnly] = useState(false);
   const [includeJsearch, setIncludeJsearch] = useState(false);
+  const [workMode, setWorkMode] = useState<'any' | 'remote' | 'hybrid' | 'onsite'>('any');
+  const [levels, setLevels] = useState<Set<string>>(new Set());
+  const [postedWithin, setPostedWithin] = useState<number | null>(null);
+  const [includeUnstated, setIncludeUnstated] = useState(true);
 
   const [found, setFound] = useState<FindResponse | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -58,6 +107,12 @@ export default function Scout({ resumeId }: { resumeId: string | null }) {
         locations: locations.split(',').map((s) => s.trim()).filter(Boolean),
         includeJsearch,
         linkedinOnly,
+        filters: {
+          workMode,
+          seniority: [...levels],
+          postedWithinDays: postedWithin,
+          includeUnstated,
+        },
       });
       setFound(result);
       // Preselect the shortlist the user would most likely pick anyway.
@@ -95,6 +150,15 @@ export default function Scout({ resumeId }: { resumeId: string | null }) {
     } finally {
       setReading(false);
     }
+  }
+
+  function toggleLevel(level: string) {
+    setLevels((prev) => {
+      const next = new Set(prev);
+      if (next.has(level)) next.delete(level);
+      else next.add(level);
+      return next;
+    });
   }
 
   function toggle(id: string) {
@@ -220,6 +284,62 @@ export default function Scout({ resumeId }: { resumeId: string | null }) {
           </label>
         </div>
 
+        <div className="row filters">
+          <label>
+            <span className="label-text">Work arrangement</span>
+            <select
+              value={workMode}
+              onChange={(e) => setWorkMode(e.target.value as typeof workMode)}
+            >
+              <option value="any">Any</option>
+              <option value="remote">Remote</option>
+              <option value="hybrid">Hybrid</option>
+              <option value="onsite">On-site</option>
+            </select>
+          </label>
+          <label>
+            <span className="label-text">Posted within</span>
+            <select
+              value={postedWithin ?? ''}
+              onChange={(e) => setPostedWithin(e.target.value ? Number(e.target.value) : null)}
+            >
+              <option value="">Any time</option>
+              <option value="1">24 hours</option>
+              <option value="7">7 days</option>
+              <option value="30">30 days</option>
+            </select>
+          </label>
+        </div>
+
+        <fieldset className="levels">
+          <legend className="label-text">Seniority — read from the job title</legend>
+          {LEVELS.map((level) => (
+            <label className="check-inline" key={level}>
+              <input
+                type="checkbox"
+                checked={levels.has(level)}
+                onChange={() => toggleLevel(level)}
+              />{' '}
+              {LEVEL_LABEL[level]}
+            </label>
+          ))}
+        </fieldset>
+
+        <label className="check">
+          <input
+            type="checkbox"
+            checked={includeUnstated}
+            onChange={(e) => setIncludeUnstated(e.target.checked)}
+          />
+          <span>
+            Keep roles that don&apos;t say
+            <em>
+              Most titles state no level, and many postings give no date or work arrangement.
+              Untick to hide them when a filter is on.
+            </em>
+          </span>
+        </label>
+
         <div className="checks">
           <label className="check">
             <input
@@ -267,8 +387,9 @@ export default function Scout({ resumeId }: { resumeId: string | null }) {
       {found && (
         <section>
           <div className="eyebrow">
-            {found.total_found} scanned · {found.candidates.length} in your locations
+            {found.total_found} scanned · {found.candidates.length} shown
           </div>
+          {hiddenSummary(found.hidden) && <p className="note">{hiddenSummary(found.hidden)}</p>}
 
           <p className="note" style={{ marginBottom: '1rem' }}>
             Ranked by overlap with your CV. This step is free and cost nothing to run —
@@ -290,6 +411,7 @@ export default function Scout({ resumeId }: { resumeId: string | null }) {
                       <th style={{ width: '6rem' }}>Relevance</th>
                       <th>Role</th>
                       <th>Company</th>
+                      <th>Level · arrangement · posted</th>
                       <th>Shared with your CV</th>
                     </tr>
                   </thead>
@@ -318,6 +440,7 @@ export default function Scout({ resumeId }: { resumeId: string | null }) {
                           <br />
                           <span className="q">{c.location}</span>
                         </td>
+                        <td className="q">{metaLine(c.seniority, c.work_mode, c.posted_at)}</td>
                         <td className="q">{c.overlap.slice(0, 5).join(', ') || '—'}</td>
                       </tr>
                     ))}
@@ -380,9 +503,21 @@ export default function Scout({ resumeId }: { resumeId: string | null }) {
                   {line.gap}
                 </p>
               )}
+              <p className="q">{metaLine(line.seniority, line.work_mode, line.posted_at)}</p>
+              {line.matched.length > 0 && (
+                <div className="chips">
+                  <span className="label-text">Top matches</span>
+                  {line.matched.slice(0, 3).map((m) => (
+                    <span className="pill present" key={m}>
+                      {m}
+                    </span>
+                  ))}
+                </div>
+              )}
               {line.missing.length > 0 && (
                 <div className="chips">
-                  {line.missing.map((m) => (
+                  <span className="label-text">Top missing</span>
+                  {line.missing.slice(0, 3).map((m) => (
                     <span className="pill missing" key={m}>
                       {m}
                     </span>

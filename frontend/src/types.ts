@@ -19,8 +19,18 @@ export interface SubScore {
   deductions: Deduction[];
 }
 
+export type RequirementCategory =
+  | 'skill'
+  | 'experience'
+  | 'education'
+  | 'certification'
+  | 'language'
+  | 'location';
+
 export interface Requirement {
   skill: string;
+  // Absent on analyses stored before categories existed.
+  category?: RequirementCategory;
   importance: Importance;
   status: Status;
   evidence: string;
@@ -70,17 +80,24 @@ export interface ScoutCandidate {
   source: string;
   publisher: string;
   remote: boolean;
+  seniority: string;
+  work_mode: string;
+  posted_at: string | null;
 }
 
 export interface FindResponse {
   total_found: number;
   by_source: Record<string, number>;
   candidates: ScoutCandidate[];
+  hidden: Record<string, number>;
 }
 
 export interface ScoredLine {
   id: string;
   score: number;
+  seniority: string;
+  work_mode: string;
+  posted_at: string | null;
   title: string;
   company: string;
   location: string;
@@ -263,4 +280,60 @@ export interface CvVersion {
   placeholders: number;
   created_at: string;
   profile: CvProfile;
+}
+
+// --- Export -----------------------------------------------------------------
+
+export type ExportFormat = 'pdf' | 'docx';
+
+export interface PlaceholderSlot {
+  index: number;
+  target: string;
+  label: string;
+  text: string;
+  placeholder: string;
+}
+
+// --- Job search filters and job-link analysis -------------------------------
+
+export type WorkMode = 'any' | 'remote' | 'hybrid' | 'onsite';
+
+export interface ScoutFilters {
+  workMode: WorkMode;
+  seniority: string[];
+  postedWithinDays: number | null;
+  includeUnstated: boolean;
+}
+
+export interface FetchedJob {
+  title: string;
+  company: string;
+  location: string;
+  description: string;
+  apply_url: string;
+  source: string;
+}
+
+export type TargetingBasis = 'stated' | 'inferred';
+
+export interface TargetingSignal {
+  point: string;
+  basis: TargetingBasis;
+  quote: string;
+}
+
+export interface TargetingAction {
+  action: string;
+  why: string;
+  basis: TargetingBasis;
+  quote: string;
+}
+
+export interface Targeting {
+  values: TargetingSignal[];
+  tone: TargetingSignal;
+  keywords: string[];
+  actions: TargetingAction[];
+  caveat: string;
+  prompt_version: string;
 }

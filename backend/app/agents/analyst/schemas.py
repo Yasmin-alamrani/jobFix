@@ -35,6 +35,17 @@ class Fit(str, Enum):
     FAR_UNDER = "far_under"
 
 
+class Category(str, Enum):
+    """What kind of requirement it is -- how a recruiter groups a posting."""
+
+    SKILL = "skill"
+    EXPERIENCE = "experience"
+    EDUCATION = "education"
+    CERTIFICATION = "certification"
+    LANGUAGE = "language"
+    LOCATION = "location"          # where, relocation, travel, visa, work permit
+
+
 # --- What the model returns -------------------------------------------------
 
 
@@ -42,6 +53,12 @@ class Requirement(BaseModel):
     """One requirement lifted from the job description."""
 
     skill: str = Field(description="The requirement, as a short noun phrase.")
+    # Defaults to skill so that analyses stored before categories existed, and
+    # the scout's own matcher (whose prompt does not ask), still validate.
+    category: Category = Field(
+        default=Category.SKILL,
+        description="skill, experience, education, certification, language or location.",
+    )
     importance: Importance = Field(
         description="critical if the JD lists it as required/must-have, else preferred."
     )

@@ -55,6 +55,7 @@ export async function findJobs(input: {
   locations: string[];
   includeJsearch: boolean;
   linkedinOnly: boolean;
+  filters?: import('./types').ScoutFilters;
 }): Promise<import('./types').FindResponse> {
   return unwrap(
     await fetch(`${BASE}/api/scout/find`, {
@@ -66,6 +67,14 @@ export async function findJobs(input: {
         locations: input.locations,
         include_jsearch: input.includeJsearch,
         linkedin_only: input.linkedinOnly,
+        ...(input.filters
+          ? {
+              work_mode: input.filters.workMode,
+              seniority: input.filters.seniority,
+              posted_within_days: input.filters.postedWithinDays,
+              include_unstated: input.filters.includeUnstated,
+            }
+          : {}),
       }),
     }),
   );
@@ -174,4 +183,93 @@ export async function listVersions(resumeId: string): Promise<import('./types').
 export async function deleteVersion(versionId: string): Promise<void> {
   const res = await fetch(`${BASE}/api/versions/${versionId}`, { method: 'DELETE' });
   if (!res.ok && res.status !== 204) await unwrap(res);
+}
+
+export async function getPlaceholders(
+  versionId: string,
+): Promise<import('./types').PlaceholderSlot[]> {
+  return unwrap(await fetch(`${BASE}/api/versions/${versionId}/placeholders`));
+}
+
+export async function fillPlaceholders(
+  versionId: string,
+  values: Record<number, string>,
+  drop: number[],
+): Promise<import('./types').CvVersion> {
+  return unwrap(
+    await fetch(`${BASE}/api/versions/${versionId}/placeholders`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ values, drop }),
+    }),
+  );
+}
+
+/* RFC 5987 first, so an Arabic filename survives; the plain form is the
+   ASCII fallback the server also sends. */
+function filenameFrom(header: string | null): string | null {
+  if (!header) return null;
+  const encoded = /filename\*=UTF-8''([^;]+)/i.exec(header);
+  if (encoded) {
+    try {
+      return decodeURIComponent(encoded[1]);
+    } catch {
+      /* fall through to the plain form */
+    }
+  }
+  const plain = /filename="([^"]+)"/i.exec(header);
+  return plain ? plain[1] : null;
+}
+
+/* Fetched rather than linked, so a refusal -- placeholders left, Pango
+   missing -- arrives as a message the page can show instead of navigating the
+   browser to a JSON error. */
+export async function downloadExport(
+  versionId: string,
+  format: import('./types').ExportFormat,
+): Promise<void> {
+  const res = await fetch(`${BASE}/api/versions/${versionId}/export.${format}`);
+  if (!res.ok) await unwrap(res);
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filenameFrom(res.headers.get('Content-Disposition')) ?? `cv.${format}`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+export async function fetchJob(url: string): Promise<import('./types').FetchedJob> {
+  return unwrap(
+    await fetch(`${BASE}/api/jobs/fetch`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url }),
+    }),
+  );
+}
+
+export async function getTargeting(input: {
+  resumeId: string;
+  title: string;
+  company: string;
+  jobDescription: string;
+}): Promise<import('./types').Targeting> {
+  const payload = JSON.stringify({
+    resume_id: input.resumeId,
+    title: input.title,
+    company: input.company,
+    job_description: input.jobDescription,
+  });
+  return shared(`targeting:${payload}`, async () =>
+    unwrap(
+      await fetch(`${BASE}/api/jobs/targeting`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: payload,
+      }),
+    ),
+  );
 }

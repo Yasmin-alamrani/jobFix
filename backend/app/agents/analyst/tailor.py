@@ -39,7 +39,7 @@ from app.core.claude import get_claude, text_block
 from app.prompts import data_block, tailor_v1
 
 from .profile import CvProfile
-from .provenance import PLACEHOLDER, Finding, introduced, normalise, vocabulary
+from .provenance import PLACEHOLDER, Finding, introduced, quoted_in, vocabulary
 from .schemas import Importance
 
 log = logging.getLogger(__name__)
@@ -236,6 +236,31 @@ def _scope(profile: CvProfile, t: Target) -> tuple[str, str]:
     return profile.all_text, "your CV"
 
 
+def editable_texts(profile: CvProfile) -> list[tuple[str, str, str]]:
+    """Every free-text item tailoring can rewrite, as (target, label, text).
+
+    Public because export needs the same addressing to find and fill the
+    placeholders a rewrite left behind.
+    """
+    items = [("summary", "Summary", profile.summary)]
+    for i, role in enumerate(profile.experience):
+        for j, bullet in enumerate(role.bullets):
+            t = Target("bullet", i, j)
+            items.append((f"exp{i}.b{j}", _label(profile, t, "rewrite"), bullet))
+    for i, project in enumerate(profile.projects):
+        items.append((f"proj{i}.desc", _label(profile, Target("desc", i), "rewrite"),
+                      project.description))
+    return items
+
+
+def set_text(profile: CvProfile, target: str, value: str) -> None:
+    """Replace one free-text item, addressed the way `editable_texts` names it."""
+    parsed = parse_target(target)
+    if parsed is None or parsed.kind not in _ALLOWED["rewrite"] or _text_at(profile, parsed) is None:
+        raise ValueError(f"{target!r} is not an editable text item.")
+    _set_text(profile, parsed, value)
+
+
 # --- diffs --------------------------------------------------------------------
 
 
@@ -307,14 +332,6 @@ class _Unusable(Exception):
 
 def _squash(text: str) -> str:
     return " ".join(text.split())
-
-
-def _quoted(quote: str, source: str) -> bool:
-    """Whether a quote really comes from the source, ellipses allowed."""
-    haystack = _squash(normalise(source)).casefold()
-    pieces = [_squash(p).casefold().strip(" \"'“”") for p in re.split(r"\.\.\.|…", quote)]
-    pieces = [p for p in pieces if p]
-    return bool(pieces) and all(p in haystack for p in pieces)
 
 
 def _resolve(profile: CvProfile, proposed: ProposedEdit, edit_id: str) -> tuple[Edit, Target]:
@@ -394,7 +411,7 @@ def _violations(profile: CvProfile, edit: Edit, t: Target, job_vocab: set[str]) 
         return ["That is not a skill name."]
     if skill.casefold() in {s.casefold() for s in profile.skills}:
         return ["It is already in your skills list."]
-    if not edit.evidence or not _quoted(edit.evidence, profile.all_text):
+    if not edit.evidence or not quoted_in(edit.evidence, profile.all_text):
         return ["No quote from your CV was given to show this skill, so it cannot be added."]
     unsupported = introduced(skill, scope=edit.evidence, strict=True, where="the quoted line")
     if unsupported:

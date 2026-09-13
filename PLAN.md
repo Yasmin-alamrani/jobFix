@@ -3,7 +3,7 @@
 One flow, four stages. Stages 1 and 2 largely exist; this plan completes them
 and adds tailoring and export on top.
 
-Approved 11 Sep 2026. **Phases 0, 1 and 2 are done**; 3 and 4 are not started.
+Approved 11 Sep 2026. **All five phases (0–4) are built.**
 
 ## Where the code actually stands
 
@@ -167,7 +167,7 @@ from nouns or mark names, so a new Arabic word must stem-match the edited item
 or be on a short list of common verbs. Safer, and it means Arabic rewrites are
 withheld more often than English ones.
 
-## Phase 3 — export
+## Phase 3 — export ✅
 
 **Decision: WeasyPrint**, taken 11 Sep 2026.
 
@@ -182,7 +182,7 @@ pango gdk-pixbuf libffi`), so the backend stops being pip-only. Accepted.
 
 One `CvProfile` feeds two renderers — HTML→PDF, and `python-docx` with `w:bidi`
 / `w:rtl` run properties — so there is one data model and no template drift.
-Needs an OFL-licensed embeddable font: **Noto Naskh Arabic**.
+Needs an OFL-licensed embeddable Arabic font — planned as Noto Naskh Arabic, shipped as **Tajawal**; see below for why.
 
 **Placeholders are filled here.** Phase 2 saves `[add number]` slots as they
 are — a version is only ever the original plus checked edits, so there is no
@@ -193,7 +193,60 @@ unfilled placeholder is never exported silently.
 
 New dependency: `weasyprint`. `python-docx` is already present.
 
-## Phase 4 — search filters and job-URL analysis
+**Built.** `export/document.py` lays a version out once; `export/pdf.py` and
+`export/docx.py` render that layout and nothing else, so the two files cannot
+drift. What the implementation settled:
+
+- **The Arabic font changed, and the reason is the finding of this phase.**
+  Noto Naskh Arabic renders beautifully and produces an unreadable text layer:
+  it draws letters from dotless skeletons plus separate dot glyphs, and the
+  PDF's glyph-to-text map cannot reassemble them — "ياسمين" extracted as
+  "ياسميOن". Noto Sans Arabic and Noto Kufi Arabic are built the same way.
+  Seven fonts were rendered and parsed back; **Tajawal** (OFL) extracted as well
+  as the system Arial reference and was chosen. An Arabic CV whose text cannot
+  be read is not ATS-friendly however it looks.
+- **Two Arabic PDF limits remain with every font tried**, including Arial, and
+  are properties of PDF text extraction: a lam-alef ligature can come back with
+  its letters swapped, and a line mixing Arabic with digits or Latin text can
+  come back out of order. Both are pinned as `xfail` tests so an upstream fix is
+  noticed. The DOCX has neither problem, so the interface recommends the Word
+  file for Arabic applications and the PDF for reading and printing.
+- **The renderer cannot be made to fetch anything.** CV text is HTML-escaped,
+  and WeasyPrint's URL fetcher is replaced by one that allows only a `.ttf`
+  directly inside the bundled fonts directory — resolved first, so
+  `fonts/../../etc/passwd` is refused. The same SSRF boundary as job intake.
+- **Pango is loaded lazily, and found without an environment variable.** A
+  missing Pango costs the PDF button (503 with a fix), not the API, and Word
+  export keeps working. On macOS the Homebrew library path is added in code
+  before import, so nobody has to export `DYLD_FALLBACK_LIBRARY_PATH`.
+- **DOCX:** Arial (present in Word and Google Docs, Arabic included), `w:bidi`
+  on paragraphs and section, `w:rtl` on Arabic runs only, complex-script size
+  and bold, real Heading 1 and List Bullet styles, A4, no tables or header
+  text, every property written in OOXML schema order (asserted).
+- **Placeholders** are filled with the user's own figure (must contain a digit,
+  recorded on the version as `user_supplied`) or dropped, which restores the
+  item's original wording from `rewrite_origins` saved with the version.
+  Export answers 409 while any remain — enforced on the server.
+
+**Verified:** the English PDF passes this app's own ATS parser — text layer,
+one column, no tables, nothing in the header band, fonts embedded, all seven
+headings recognised — and its extracted text contains the version's content and
+nothing else. The Arabic PDF is one column with Tajawal embedded and pure-Arabic
+lines extracting in order. Both DOCX files reopen with every line.
+
+**Not verified:** no office suite is installed here, so neither file has been
+opened in Word, Google Docs or LibreOffice. The acceptance criterion asks for
+that; it needs doing by hand.
+
+**Found along the way, outside this phase:**
+- The audit's parser recognises only English section headings. Its heading
+  normaliser strips non-Latin letters, so an Arabic CV's headings are silently
+  ignored — neither credited nor flagged.
+- The backend venv was created at `~/project1` and the project moved, so every
+  `.venv/bin/<tool>` script has a dead shebang. The README now calls tools with
+  `python -m`, which is unaffected.
+
+## Phase 4 — search filters and job-URL analysis ✅
 
 - `ScoutRequest` and `prefilter.rank()` gain `remote`, `seniority`,
   `posted_within_days`.
@@ -201,6 +254,45 @@ New dependency: `weasyprint`. `python-docx` is already present.
   keywords, tone — **every inference labelled as one**. No invented company facts.
 - The UI gains the manual-paste fallback textarea when a fetch fails, which is
   the documented outcome for a login wall or a JS-rendered page.
+
+**Built**, with three changes from the sketch above:
+
+- **Filters sit in front of the ranker, not inside it** (`scout/filters.py`).
+  Each value is read from what the posting states: the date as published, the
+  arrangement from the source's remote flag or the location's wording, and
+  seniority from title words — the only place any source states it, so the UI
+  labels it "from title". A posting that states nothing is "unknown", and
+  whether unknowns are kept is the user's choice (`include_unstated`, on by
+  default, because most titles name no level). Every result reports what each
+  filter hid, so a short list reads as "the filters hid 40", not "there are
+  only 6 jobs".
+- **Job-link analysis lives in the audit tab, not the scout's `from-url`.** The
+  audit already produces the requirement-by-requirement table with a verbatim
+  quote per requirement, so a posting URL now fills the audit form
+  (`POST /api/jobs/fetch`) and the full Claude analysis runs on it. The
+  scout's quick `from-url` score is unchanged. Requirements now carry a
+  category — skill, experience, education, certification, language,
+  location/visa — which needed a prompt change, so it shipped as
+  **`analyst_v2`**; analyses stored under v1 keep saying so, and a missing
+  category reads as "skill". The dashboard shows must-have against
+  nice-to-have, grouped by category, with "met / partly met / missing".
+- **Every fetch failure ends at the paste box.** Blocked, walled, forbidden,
+  unreadable or too short: each answers with the reason and "paste the
+  description into the box below", and the box is directly under the URL field.
+
+**Company targeting** (`analyst/targeting.py`) reads the posting and nothing
+else; there is no company research behind it, and the caveat on every answer
+says so. The rule that keeps it honest is mechanical, like tailoring's: a point
+keeps the label "stated" only if it carries a quote that is really in the
+posting — otherwise it is relabelled "inferred", whatever the model called it —
+and a keyword survives only if the posting contains it as a whole word. Actions
+follow `NO_FABRICATION`: a missing requirement is advice on closing a gap, never
+wording that implies the candidate meets it.
+
+**Verified:** 626 backend tests pass, plus the 2 documented Arabic-PDF
+`xfail`s; none reaches the network. The frontend typechecks and builds.
+**Not verified:** none of the new screens has been used in a browser, and
+neither targeting nor `analyst_v2` has been run against the real model.
 
 ## Verification
 

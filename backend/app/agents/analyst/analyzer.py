@@ -11,7 +11,7 @@ Neither call returns a score. They return evidence; `scoring.py` does the
 arithmetic. That is what keeps the number reproducible and every deduction
 traceable to a quoted span.
 
-The prompts themselves live in `app/prompts/analyst_v1.py` and are versioned,
+The prompts themselves live in `app/prompts/analyst_v2.py` and are versioned,
 because a change to their wording changes the evidence and therefore every
 score produced afterwards. The version is recorded on each result.
 """
@@ -23,7 +23,7 @@ from pathlib import Path
 from pydantic import BaseModel
 
 from app.core.claude import get_claude, pdf_block, text_block
-from app.prompts import analyst_v1, data_block
+from app.prompts import analyst_v2, data_block
 
 from . import scoring
 from .parser import ParseReport, parse_pdf
@@ -71,7 +71,7 @@ def analyze(
     role = f"Target role: {job_title}\n\n" if job_title else ""
     match = claude.call_structured(
         schema=_MatchCall,
-        system=analyst_v1.match_system(industry),
+        system=analyst_v2.match_system(industry),
         content=[
             text_block(
                 role
@@ -84,7 +84,7 @@ def analyze(
 
     writing = claude.call_structured(
         schema=WritingReview,
-        system=analyst_v1.writing_system(
+        system=analyst_v2.writing_system(
             industry,
             bilingual=report.is_bilingual or report.primary_language == "ar",
         ),
@@ -112,7 +112,7 @@ def analyze(
         writing=writing,
         top_fixes=scoring.top_fixes(subs),
         parse_facts=_facts(report),
-        prompt_version=analyst_v1.VERSION,
+        prompt_version=analyst_v2.VERSION,
     )
 
 

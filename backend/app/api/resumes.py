@@ -192,7 +192,7 @@ def owned_resume(db: Session, resume_id: str) -> Resume:
     return resume
 
 
-def _text_of(resume: Resume) -> str:
+def text_of(resume: Resume) -> str:
     """The CV's text, preferring the original over anything re-extracted.
 
     A pasted CV keeps its own text: laying it into a PDF and reading it back
@@ -224,7 +224,7 @@ def ensure_profile(db: Session, resume: Resume) -> StoredProfile:
         return stored
 
     with claude_errors("profile extraction"):
-        parsed = extract_profile(_text_of(resume))
+        parsed = extract_profile(text_of(resume))
     stored = StoredProfile(
         user_id=resume.user_id,
         resume_id=resume.id,
@@ -318,7 +318,7 @@ def get_fields(resume_id: str, db: Session = Depends(get_db)) -> FieldsOut:
         return FieldsOut(resume_id=resume_id, fields=stored.fields.get("fields", []))
 
     with claude_errors("field matching"):
-        fits = suggest_fields(_text_of(resume))
+        fits = suggest_fields(text_of(resume))
 
     payload = [fit.model_dump(mode="json") for fit in fits]
     if stored is not None:

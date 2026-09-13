@@ -243,6 +243,20 @@ def vocabulary(text: str) -> set[str]:
     return vocab
 
 
+def quoted_in(quote: str, source: str) -> bool:
+    """Whether a quote really comes from the source.
+
+    Case and spacing are ignored, and an ellipsis may stand for omitted words.
+    Tailoring uses this to check the evidence for an added skill, and targeting
+    to decide whether a point about an employer may be called "stated".
+    """
+    haystack = " ".join(normalise(source).split()).casefold()
+    pieces = [" ".join(p.split()).casefold().strip(" \"'“”")
+              for p in re.split(r"\.\.\.|…", normalise(quote))]
+    pieces = [p for p in pieces if p]
+    return bool(pieces) and all(p in haystack for p in pieces)
+
+
 def _variants(low: str):
     yield low
     if low.endswith("y"):

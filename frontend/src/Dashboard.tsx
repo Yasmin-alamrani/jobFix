@@ -1,5 +1,64 @@
 import { useMemo, useState } from 'react';
-import type { AnalysisResult, Deduction, Requirement, SubScore } from './types';
+import type {
+  AnalysisResult,
+  Deduction,
+  Requirement,
+  RequirementCategory,
+  SubScore,
+} from './types';
+
+const STATUS_LABEL = { present: 'met', weak: 'partly met', missing: 'missing' } as const;
+
+const CATEGORY_ORDER: RequirementCategory[] = [
+  'skill', 'experience', 'education', 'certification', 'language', 'location',
+];
+const CATEGORY_LABEL: Record<RequirementCategory, string> = {
+  skill: 'Skills',
+  experience: 'Experience',
+  education: 'Education',
+  certification: 'Certifications',
+  language: 'Languages',
+  location: 'Location & visa',
+};
+
+/* Must-haves against nice-to-haves, grouped the way a recruiter reads a
+   posting. Each pill is coloured by whether the CV meets it. */
+function Breakdown({ requirements }: { requirements: Requirement[] }) {
+  if (requirements.length === 0) return null;
+  const groups = (importance: 'critical' | 'preferred') =>
+    CATEGORY_ORDER.map((category) => ({
+      category,
+      items: requirements.filter(
+        (r) => r.importance === importance && (r.category ?? 'skill') === category,
+      ),
+    })).filter((g) => g.items.length > 0);
+
+  return (
+    <div className="breakdown">
+      {(['critical', 'preferred'] as const).map((importance) => (
+        <div key={importance}>
+          <h4>{importance === 'critical' ? 'Must-have' : 'Nice to have'}</h4>
+          {groups(importance).length === 0 ? (
+            <p className="empty">None stated.</p>
+          ) : (
+            groups(importance).map((g) => (
+              <div className="breakdown-group" key={g.category}>
+                <span className="label-text">{CATEGORY_LABEL[g.category]}</span>
+                <div className="chips">
+                  {g.items.map((r, i) => (
+                    <span className={`pill ${r.status}`} key={i} title={STATUS_LABEL[r.status]}>
+                      {r.skill}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
 
 /* The ledger is the page's argument: the score is arithmetic, so it is shown
    as arithmetic. Every line names the rule that cost the points. */
@@ -109,6 +168,7 @@ function Requirements({ requirements }: { requirements: Requirement[] }) {
         <thead>
           <tr>
             <th>Requirement</th>
+            <th>Type</th>
             <th>Weight</th>
             <th>Status</th>
             <th>Evidence in your resume</th>
@@ -118,6 +178,7 @@ function Requirements({ requirements }: { requirements: Requirement[] }) {
           {sorted.map((r, i) => (
             <tr key={`${r.skill}-${i}`}>
               <td>{r.skill}</td>
+              <td className="q">{CATEGORY_LABEL[r.category ?? 'skill'].toLowerCase()}</td>
               <td>
                 <span
                   className={`pill ${r.importance === 'critical' ? 'critical-req' : 'preferred'}`}
@@ -126,7 +187,7 @@ function Requirements({ requirements }: { requirements: Requirement[] }) {
                 </span>
               </td>
               <td>
-                <span className={`pill ${r.status}`}>{r.status}</span>
+                <span className={`pill ${r.status}`}>{STATUS_LABEL[r.status]}</span>
               </td>
               <td className="q">{r.evidence || (r.note ? r.note : '—')}</td>
             </tr>
@@ -217,6 +278,7 @@ export default function Dashboard({ result }: { result: AnalysisResult }) {
 
       <section>
         <div className="eyebrow">Requirements from the posting</div>
+        <Breakdown requirements={result.requirements} />
         <Requirements requirements={result.requirements} />
       </section>
 

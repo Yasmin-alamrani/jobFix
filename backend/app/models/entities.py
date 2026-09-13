@@ -149,6 +149,13 @@ class CvVersion(Base):
     is_original: Mapped[bool] = mapped_column(Boolean, default=False)
     profile: Mapped[dict] = mapped_column(JSON)
     accepted_edit_ids: Mapped[list] = mapped_column(JSON, default=list)
+    # target -> the item's wording before tailoring rewrote it. Lets a
+    # placeholder be dropped by restoring the original sentence, rather than
+    # deleting "[add %]" and leaving "cutting run time by" hanging.
+    rewrite_origins: Mapped[dict] = mapped_column(JSON, default=dict)
+    # Figures the user typed into placeholders, as {"target", "value"}. Every
+    # figure in an exported CV is either in the original or recorded here.
+    user_supplied: Mapped[list] = mapped_column(JSON, default=list)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
     resume: Mapped["Resume"] = relationship(back_populates="versions")

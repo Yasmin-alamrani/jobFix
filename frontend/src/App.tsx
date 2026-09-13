@@ -2,10 +2,12 @@ import { useEffect, useState } from 'react';
 import Dashboard from './Dashboard';
 import Profile from './Profile';
 import Scout from './Scout';
+import Targeting from './Targeting';
 import { TailorButton } from './Tailor';
 import {
   createAnalysis,
   deleteResume,
+  fetchJob,
   listIndustries,
   uploadResume,
   uploadResumeText,
@@ -30,6 +32,12 @@ export default function App() {
   const [jobTitle, setJobTitle] = useState('');
   const [industry, setIndustry] = useState('tech');
   const [jobDescription, setJobDescription] = useState('');
+  const [company, setCompany] = useState('');
+  const [jobUrl, setJobUrl] = useState('');
+  const [reading, setReading] = useState(false);
+  const [readError, setReadError] = useState<string | null>(null);
+  // Bumped per audit, so the targeting panel describes the run just made.
+  const [runId, setRunId] = useState(0);
 
   const [working, setWorking] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -123,10 +131,35 @@ export default function App() {
         jobTitle,
       });
       setResult(analysis.result);
+      setRunId((n) => n + 1);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong.');
     } finally {
       setWorking(null);
+    }
+  }
+
+  /* Fills the form from a posting URL. A failure changes nothing and says why;
+     the description box below is the fallback, one step away. */
+  async function readPosting(event: React.FormEvent) {
+    event.preventDefault();
+    if (!jobUrl.trim()) return;
+    setReadError(null);
+    setReading(true);
+    try {
+      const job = await fetchJob(jobUrl.trim());
+      setJobTitle(job.title);
+      setCompany(job.company);
+      setJobDescription(job.description);
+      setResult(null);
+    } catch (err) {
+      setReadError(
+        err instanceof Error
+          ? err.message
+          : 'That page could not be read. Paste the job description into the box below instead.',
+      );
+    } finally {
+      setReading(false);
     }
   }
 
@@ -226,7 +259,37 @@ export default function App() {
         <Profile key={resumeId ?? 'none'} resumeId={resumeId} />
       ) : mode === 'audit' ? (
         <>
-          <form className="form" onSubmit={runAudit} style={{ marginTop: '2rem' }}>
+          <form className="form paste-panel" onSubmit={readPosting} style={{ marginTop: '2rem' }}>
+            <label>
+              <span className="label-text">Job posting link — optional</span>
+              <input
+                type="url"
+                value={jobUrl}
+                placeholder="https://…/jobs/12345"
+                onChange={(e) => setJobUrl(e.target.value)}
+              />
+            </label>
+            <p className="note">
+              Reads the posting into the form below. If the page can&apos;t be read — a login
+              wall, a bot check, a site that forbids automated access — paste the description
+              instead.
+            </p>
+            {readError && <p className="error">{readError}</p>}
+            {reading ? (
+              <div className="working">
+                <span className="sweep">
+                  <i />
+                </span>
+                Reading that page…
+              </div>
+            ) : (
+              <button type="submit" disabled={!jobUrl.trim()}>
+                Read this posting
+              </button>
+            )}
+          </form>
+
+          <form className="form" onSubmit={runAudit} style={{ marginTop: '1.5rem' }}>
             <div className="row">
               <label>
                 <span className="label-text">Target role</span>
@@ -235,6 +298,15 @@ export default function App() {
                   value={jobTitle}
                   placeholder="Senior Backend Engineer"
                   onChange={(e) => setJobTitle(e.target.value)}
+                />
+              </label>
+              <label>
+                <span className="label-text">Company</span>
+                <input
+                  type="text"
+                  value={company}
+                  placeholder="Tamara"
+                  onChange={(e) => setCompany(e.target.value)}
                 />
               </label>
               <label>
@@ -281,6 +353,15 @@ export default function App() {
           </form>
 
           {result && <Dashboard result={result} />}
+          {result && resumeId && (
+            <Targeting
+              key={runId}
+              resumeId={resumeId}
+              title={jobTitle}
+              company={company}
+              jobDescription={jobDescription}
+            />
+          )}
           {result && (
             <TailorButton
               key={`${jobTitle}|${jobDescription.length}|${result.overall_score}`}
@@ -288,10 +369,10 @@ export default function App() {
               target={{
                 job: {
                   title: jobTitle,
-                  company: '',
+                  company,
                   location: '',
                   description: jobDescription,
-                  apply_url: '',
+                  apply_url: jobUrl.trim(),
                   source: 'audit',
                 },
               }}
