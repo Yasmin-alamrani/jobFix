@@ -20,12 +20,15 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="Resume Checker & Job Hunt", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="Resume Analyzer", version="0.1.0", lifespan=lifespan)
 
-# Single-user mode runs the Vite dev server on 5173 against this API on 8000.
+# Single-user mode runs the Vite dev server against this API on 8000. Any local
+# port is accepted, not just 5173: Vite quietly moves to 5174, 5175... when 5173
+# is taken, and a hard-coded port turns that into "Cannot reach the API" while
+# the backend is running fine. Local only either way -- no remote origin matches.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origin_regex=r"http://(localhost|127\.0\.0\.1):\d+",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

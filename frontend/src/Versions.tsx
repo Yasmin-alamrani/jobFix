@@ -214,7 +214,7 @@ export default function Versions({ resumeId }: { resumeId: string }) {
   if (versions.length === 0) {
     return (
       <p className="note">
-        No saved versions yet. Tailor your CV for a job — from an audit or a search result — to
+        No saved versions yet. Tailor your CV for a job — from a job match or a search result — to
         create one.
       </p>
     );

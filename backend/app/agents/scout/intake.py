@@ -130,6 +130,6 @@ def describe_failure(exc: Exception) -> str:
         return (
             "That page is behind a login wall or bot check, so it cannot be read "
             "automatically. Open it yourself and paste the description into the "
-            "audit tab instead."
+            "Match tab instead."
         )
     return str(exc)

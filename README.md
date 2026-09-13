@@ -1,4 +1,4 @@
-# Resume audit + job hunt
+# Resume Analyzer
 
 Two agents for a Saudi job search:
 

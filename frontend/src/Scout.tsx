@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
-import { findJobs, jobFromUrl, scoreJobs } from './api';
+import { findJobs, scoreJobs } from './api';
 import { TailorButton } from './Tailor';
-import type { FindResponse, PastedJob, ScoreResponse, ScoutCandidate } from './types';
+import type { FindResponse, ScoreResponse, ScoutCandidate } from './types';
 
 /* The two steps are deliberately separate in the UI as well as the API.
    Searching is free and instant; scoring costs money and takes time. Folding
@@ -67,7 +67,17 @@ function Bar({ value, max }: { value: number; max: number }) {
   );
 }
 
-export default function Scout({ resumeId }: { resumeId: string | null }) {
+/* A link to one specific job is handled by the Match tab, which reads the
+   posting and checks every requirement against the CV. This tab is for
+   searching; `onMatchJob` sends a user with a link there instead of offering a
+   second, thinner version of the same thing. */
+export default function Scout({
+  resumeId,
+  onMatchJob,
+}: {
+  resumeId: string | null;
+  onMatchJob: () => void;
+}) {
   const [titleHint, setTitleHint] = useState('');
   const [locations, setLocations] = useState('saudi, riyadh');
   const [linkedinOnly, setLinkedinOnly] = useState(false);
@@ -81,9 +91,6 @@ export default function Scout({ resumeId }: { resumeId: string | null }) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [scored, setScored] = useState<ScoreResponse | null>(null);
 
-  const [pastedUrl, setPastedUrl] = useState('');
-  const [pasted, setPasted] = useState<PastedJob | null>(null);
-  const [reading, setReading] = useState(false);
 
   const [searching, setSearching] = useState(false);
   const [scoring, setScoring] = useState(false);
@@ -137,21 +144,6 @@ export default function Scout({ resumeId }: { resumeId: string | null }) {
     }
   }
 
-  async function readUrl(event: React.FormEvent) {
-    event.preventDefault();
-    if (!resumeId || !pastedUrl.trim()) return;
-    setError(null);
-    setReading(true);
-    setPasted(null);
-    try {
-      setPasted(await jobFromUrl({ url: pastedUrl.trim(), resumeId }));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not read that page.');
-    } finally {
-      setReading(false);
-    }
-  }
-
   function toggleLevel(level: string) {
     setLevels((prev) => {
       const next = new Set(prev);
@@ -179,88 +171,14 @@ export default function Scout({ resumeId }: { resumeId: string | null }) {
 
   return (
     <>
-      <form className="form paste-panel" onSubmit={readUrl} style={{ marginTop: '2rem' }}>
-        <label>
-          <span className="label-text">Have a specific job link? Paste it</span>
-          <input
-            type="url"
-            value={pastedUrl}
-            placeholder="https://www.linkedin.com/jobs/view/..."
-            onChange={(e) => setPastedUrl(e.target.value)}
-          />
-        </label>
-        <p className="note">
-          Works with a link to one specific role — LinkedIn, Bayt, or a company careers
-          page. Search and listing pages won&apos;t work: those sites don&apos;t permit
-          automated access to them.
-        </p>
-        {reading ? (
-          <div className="working">
-            <span className="sweep">
-              <i />
-            </span>
-            Reading that page…
-          </div>
-        ) : (
-          <button type="submit" disabled={!pastedUrl.trim()}>
-            Read this job
-          </button>
-        )}
-      </form>
+      <p className="note" style={{ marginTop: '2rem' }}>
+        Have a link to one specific job?{' '}
+        <button type="button" className="ledger-more" onClick={onMatchJob}>
+          Match it against your CV
+        </button>{' '}
+        — that tab reads the posting and checks each requirement against your CV.
+      </p>
 
-      {pasted && (
-        <article className="finding" style={{ marginTop: '1.25rem' }}>
-          <div className="finding-head">
-            <h3>
-              <a href={pasted.apply_url} target="_blank" rel="noreferrer noopener">
-                {pasted.title}
-              </a>
-              {' — '}
-              {pasted.company}
-              {pasted.location ? `, ${pasted.location}` : ''}
-            </h3>
-            {pasted.score !== null && (
-              <span className="match-score">{pasted.score.toFixed(0)}</span>
-            )}
-          </div>
-          {pasted.why && <p className="fix">{pasted.why}</p>}
-          {pasted.gap && (
-            <p className="fix" style={{ opacity: 0.85 }}>
-              {pasted.gap}
-            </p>
-          )}
-          {pasted.missing.length > 0 && (
-            <div className="chips">
-              {pasted.missing.map((m) => (
-                <span className="pill missing" key={m}>
-                  {m}
-                </span>
-              ))}
-            </div>
-          )}
-          <p className="q" style={{ marginTop: '0.75rem' }}>
-            read via {pasted.source}
-          </p>
-          <TailorButton
-            key={pasted.apply_url}
-            resumeId={resumeId}
-            target={{
-              job: {
-                title: pasted.title,
-                company: pasted.company,
-                location: pasted.location,
-                description: pasted.description,
-                apply_url: pasted.apply_url,
-                source: pasted.source,
-              },
-            }}
-          />
-        </article>
-      )}
-
-      <div className="eyebrow" style={{ marginTop: '2.5rem' }}>
-        Or search the boards
-      </div>
 
       <form className="form" onSubmit={search} style={{ marginTop: '1rem' }}>
         <div className="row">

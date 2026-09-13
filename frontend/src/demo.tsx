@@ -9,7 +9,7 @@ createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <div className="shell">
       <header className="masthead">
-        <h1>Resume audit</h1>
+        <h1>Resume Analyzer</h1>
         <p>
           Sample report. Senior Backend Engineer, fintech — showing how a real result renders.
         </p>

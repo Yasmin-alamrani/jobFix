@@ -117,20 +117,6 @@ export interface ScoreResponse {
   lines: ScoredLine[];
 }
 
-export interface PastedJob {
-  title: string;
-  company: string;
-  location: string;
-  description: string;
-  apply_url: string;
-  source: string;
-  score: number | null;
-  why: string;
-  gap: string;
-  matched: string[];
-  missing: string[];
-}
-
 // --- Feature 1: the CV as structured entities -------------------------------
 
 export interface CvContact {

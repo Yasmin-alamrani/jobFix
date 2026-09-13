@@ -93,19 +93,6 @@ export async function scoreJobs(input: {
   );
 }
 
-export async function jobFromUrl(input: {
-  url: string;
-  resumeId: string;
-}): Promise<import('./types').PastedJob> {
-  return unwrap(
-    await fetch(`${BASE}/api/scout/from-url`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url: input.url, resume_id: input.resumeId }),
-    }),
-  );
-}
-
 export async function uploadResumeText(
   text: string,
   filename = 'pasted-cv',
