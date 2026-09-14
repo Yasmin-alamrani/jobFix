@@ -116,7 +116,7 @@ def test_empty_points_and_excess_items_are_trimmed():
 
 # --- the model call ----------------------------------------------------------------
 
-class StubClaude:
+class StubModel:
     def __init__(self, answer: Targeting) -> None:
         self.answer = answer
         self.calls: list[dict] = []
@@ -128,8 +128,8 @@ class StubClaude:
 
 @pytest.fixture
 def stub(monkeypatch):
-    client = StubClaude(result())
-    monkeypatch.setattr(targeting_mod, "get_claude", lambda: client)
+    client = StubModel(result())
+    monkeypatch.setattr(targeting_mod, "get_gemini", lambda: client)
     return client
 
 

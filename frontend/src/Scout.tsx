@@ -37,6 +37,21 @@ function hiddenSummary(hidden: Record<string, number>): string {
   return parts.length ? `Filters hid ${parts.join(', ')}.` : '';
 }
 
+/* Where the results came from. Without this, a scan with nothing from Google
+   looks the same as one that never asked it. */
+function sourceSummary(bySource: Record<string, number>): string {
+  const google = bySource.jsearch ?? 0;
+  const boards = Object.entries(bySource)
+    .filter(([source]) => source !== 'jsearch')
+    .reduce((sum, [, n]) => sum + n, 0);
+  return [
+    boards ? `${boards} from company job boards` : '',
+    google ? `${google} from Google for Jobs (LinkedIn, Bayt, Indeed and others)` : '',
+  ]
+    .filter(Boolean)
+    .join(' · ');
+}
+
 function postedLabel(iso: string | null): string {
   if (!iso) return 'date not stated';
   const days = Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000);
@@ -81,7 +96,8 @@ export default function Scout({
   const [titleHint, setTitleHint] = useState('');
   const [locations, setLocations] = useState('saudi, riyadh');
   const [linkedinOnly, setLinkedinOnly] = useState(false);
-  const [includeJsearch, setIncludeJsearch] = useState(false);
+  // On by default: without it only a handful of company boards are searched.
+  const [includeJsearch, setIncludeJsearch] = useState(true);
   const [workMode, setWorkMode] = useState<'any' | 'remote' | 'hybrid' | 'onsite'>('any');
   const [levels, setLevels] = useState<Set<string>>(new Set());
   const [postedWithin, setPostedWithin] = useState<number | null>(null);
@@ -307,6 +323,14 @@ export default function Scout({
           <div className="eyebrow">
             {found.total_found} scanned · {found.candidates.length} shown
           </div>
+          {sourceSummary(found.by_source) && (
+            <p className="note">{sourceSummary(found.by_source)}</p>
+          )}
+          {(found.notes ?? []).map((note) => (
+            <p className="note" key={note}>
+              {note}
+            </p>
+          ))}
           {hiddenSummary(found.hidden) && <p className="note">{hiddenSummary(found.hidden)}</p>}
 
           <p className="note" style={{ marginBottom: '1rem' }}>

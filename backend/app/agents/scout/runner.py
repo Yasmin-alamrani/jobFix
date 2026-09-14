@@ -16,7 +16,7 @@ from app.sources.registry import scan as scan_ats
 
 from . import brief as brief_mod
 from .brief import Brief
-from .llm import OpenRouter
+from .llm import ScoutModel
 from .matcher import Match, match_all
 from .prefilter import rank
 
@@ -46,16 +46,30 @@ class ScoutResult:
     jobs_scored: int
 
 
-def collect(request: ScoutRequest, *, jsearch_key: str = "") -> list[JobPosting]:
+def collect(
+    request: ScoutRequest,
+    *,
+    jsearch_key: str = "",
+    notes: list[str] | None = None,
+) -> list[JobPosting]:
     """Gather postings from every configured source.
 
     Tier 0 (ATS boards) is free and always runs. Tier 1 (Google for Jobs, which
     is how LinkedIn roles reach us) costs a request and is opt-in.
+
+    `notes`, when given, receives what the user should know about a source they
+    asked for that did not deliver -- no key, a spent quota, no results. In the
+    log alone, each of those reads to the user as "Google has nothing".
     """
+    notes = [] if notes is None else notes
     jobs = scan_ats(industries=request.industries, verified_only=True)
     log.info("tier 0: %s jobs from ATS boards", len(jobs))
 
-    if request.include_jsearch and jsearch_key:
+    if request.include_jsearch and not jsearch_key:
+        notes.append(
+            "Google for Jobs was not searched: there is no JSEARCH_API_KEY in backend/.env."
+        )
+    elif request.include_jsearch:
         from app.sources.jsearch import JSearch
 
         query = request.jsearch_query or request.title_hint or "software engineer"
@@ -68,8 +82,14 @@ def collect(request: ScoutRequest, *, jsearch_key: str = "") -> list[JobPosting]
             )
             log.info("tier 1: %s jobs from Google for Jobs", len(found))
             jobs += found
+            if client.last_problem:
+                notes.append(f"Google for Jobs: {client.last_problem}")
+            elif not found:
+                where = " on LinkedIn" if request.linkedin_only else ""
+                notes.append(f"Google for Jobs found no roles{where} for “{query}”.")
         except Exception as exc:  # noqa: BLE001 -- one dead source must not end a scan
             log.warning("jsearch unavailable: %s", exc)
+            notes.append(f"Google for Jobs could not be searched: {exc}")
 
     # Deduplicate across sources: the same role often appears on a company's own
     # board and again through the aggregator.
@@ -82,7 +102,7 @@ def collect(request: ScoutRequest, *, jsearch_key: str = "") -> list[JobPosting]
 def run(
     request: ScoutRequest,
     *,
-    client: OpenRouter,
+    client: ScoutModel,
     jsearch_key: str = "",
     headline: bool = True,
 ) -> ScoutResult:

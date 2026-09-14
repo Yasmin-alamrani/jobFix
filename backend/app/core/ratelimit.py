@@ -94,7 +94,7 @@ def rate_limit(name: str, *, capacity: float, per_second: float):
     return dependency
 
 
-# Analysis is two Claude calls with thinking enabled -- slow and the most
+# Analysis is two model calls with thinking enabled -- slow and the most
 # expensive thing here, so the burst is small.
 analysis_limit = rate_limit("analysis", capacity=5, per_second=1 / 20)
 
@@ -104,7 +104,7 @@ scoring_limit = rate_limit("scoring", capacity=10, per_second=1 / 10)
 # Fetching a pasted URL reaches someone else's server. Paced closer to human.
 fetch_limit = rate_limit("fetch", capacity=6, per_second=1 / 10)
 
-# Upload plus profile extraction: one Claude call per upload.
+# Upload plus profile extraction: one model call per upload.
 upload_limit = rate_limit("upload", capacity=10, per_second=1 / 6)
 
 

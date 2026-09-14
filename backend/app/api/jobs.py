@@ -16,10 +16,9 @@ from sqlalchemy.orm import Session
 
 from app.agents.analyst.targeting import Targeting, target
 from app.agents.scout.intake import IntakeError, describe_failure, fetch_one
-from app.agents.scout.llm import OpenRouter
+from app.agents.scout.llm import available_model
 from app.agents.scout.policy import PolicyViolation, WallEncountered
-from app.api.resumes import claude_errors, owned_resume, text_of
-from app.core.config import get_settings
+from app.api.resumes import model_errors, owned_resume, text_of
 from app.core.ratelimit import analysis_limit, fetch_limit
 from app.core.safe_fetch import BlockedAddress
 from app.models.db import get_db
@@ -61,11 +60,7 @@ class TargetingRequest(BaseModel):
 @router.post("/fetch", response_model=FetchedJob, dependencies=[Depends(fetch_limit)])
 def fetch_job(request: FetchRequest) -> FetchedJob:
     """Read one posting. Free when the page publishes structured data."""
-    settings = get_settings()
-    model = (
-        OpenRouter(settings.openrouter_api_key, model=settings.scout_model)
-        if settings.openrouter_api_key else None
-    )
+    model = available_model()
     try:
         job = fetch_one(request.url.strip(), client=model)
     except (BlockedAddress, PolicyViolation, WallEncountered, IntakeError) as exc:
@@ -96,7 +91,7 @@ def company_targeting(request: TargetingRequest, db: Session = Depends(get_db)) 
         )
     resume_text = text_of(owned_resume(db, request.resume_id)) if request.resume_id else ""
 
-    with claude_errors("company targeting"):
+    with model_errors("company targeting"):
         return target(
             job_description=request.job_description, title=request.title,
             company=request.company, resume_text=resume_text,

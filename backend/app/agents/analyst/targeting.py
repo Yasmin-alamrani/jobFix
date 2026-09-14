@@ -21,7 +21,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from app.core.claude import get_claude, text_block
+from app.core.gemini import get_gemini, text_block
 from app.prompts import data_block, targeting_v1
 
 from .provenance import normalise, quoted_in
@@ -104,7 +104,7 @@ def verify(result: Targeting, posting: str) -> Targeting:
 def target(
     *, job_description: str, title: str = "", company: str = "", resume_text: str = ""
 ) -> Targeting:
-    """One Claude call, then `verify`. Title and company go inside the fence,
+    """One model call, then `verify`. Title and company go inside the fence,
     because they come from the same untrusted posting as the description."""
     header = "\n".join(x for x in (
         f"Title: {title}" if title else "", f"Company: {company}" if company else "",
@@ -115,7 +115,7 @@ def target(
     if resume_text.strip():
         content += "\n\n" + data_block("resume_text", resume_text[:30_000])
 
-    result = get_claude().call_structured(
+    result = get_gemini().call_structured(
         schema=Targeting,
         system=targeting_v1.SYSTEM,
         content=[text_block(content + "\n\nAnalyse how to target this employer.")],

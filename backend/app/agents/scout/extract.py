@@ -32,7 +32,7 @@ from pydantic import BaseModel
 from app.sources.base import JobPosting, strip_html
 
 from .browser import Page
-from .llm import OpenRouter, OpenRouterError
+from .llm import ScoutModel, ScoutModelError
 
 log = logging.getLogger(__name__)
 
@@ -157,7 +157,7 @@ def from_json_ld(html: str) -> JobPosting | None:
 
 def from_page(
     page: Page,
-    client: OpenRouter | None = None,
+    client: ScoutModel | None = None,
     *,
     html: str = "",
 ) -> JobPosting | None:
@@ -182,8 +182,8 @@ def from_page(
     )
 
     try:
-        result = client.complete_json(schema=Extracted, system=SYSTEM, user=user)
-    except OpenRouterError as exc:
+        result = client.complete_json(schema=Extracted, system=SYSTEM, user=user, effort="low")
+    except ScoutModelError as exc:
         log.warning("extraction failed for %s: %s", page.url, exc)
         return None
 

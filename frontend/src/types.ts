@@ -90,6 +90,7 @@ export interface FindResponse {
   by_source: Record<string, number>;
   candidates: ScoutCandidate[];
   hidden: Record<string, number>;
+  notes: string[];
 }
 
 export interface ScoredLine {
@@ -197,6 +198,49 @@ export interface FieldFit {
   years_in_field: number | null;
   title_alignment: 'direct' | 'adjacent' | 'distant' | string;
   justification: string;
+}
+
+// --- The CV review ----------------------------------------------------------
+
+export type ReviewArea =
+  | 'impact'
+  | 'clarity'
+  | 'summary'
+  | 'skills'
+  | 'structure'
+  | 'consistency'
+  | 'language'
+  | 'completeness';
+
+export interface ReviewWeakness {
+  area: ReviewArea;
+  severity: Severity;
+  title: string;
+  evidence: string;          // verbatim from the CV; empty when something is absent
+  problem: string;
+  recommendation: string;
+  example: string;           // may contain [add ...] placeholders
+  example_withheld: boolean; // the model's example added facts, so it was removed
+}
+
+export interface ReviewStrength { point: string; evidence: string; }
+
+export interface ReviewCheck {
+  rule: string;
+  title: string;
+  evidence: string;
+  fix: string;
+  severity: Severity;
+}
+
+export interface CvReview {
+  verdict: string;
+  strengths: ReviewStrength[];
+  weaknesses: ReviewWeakness[];
+  checks: ReviewCheck[];
+  withheld: number;
+  layout_checked: boolean;
+  prompt_version: string;
 }
 
 // --- Tailoring and saved versions ------------------------------------------

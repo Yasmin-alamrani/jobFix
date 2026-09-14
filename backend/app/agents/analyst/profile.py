@@ -9,7 +9,7 @@ and has to put them back where they came from; export lays out sections in a
 fixed order. All three would otherwise re-derive the same structure from the
 same text, three times, differently.
 
-One Claude call, schema-validated. Dates are kept exactly as the CV spells them,
+One model call, schema-validated. Dates are kept exactly as the CV spells them,
 with a parsed year alongside *only* where a real year appears -- the moment this
 starts inferring "2021" from "three years ago", the profile stops being a record
 of the document and becomes a guess about it.
@@ -21,7 +21,7 @@ import re
 
 from pydantic import BaseModel, Field
 
-from app.core.claude import get_claude, text_block
+from app.core.gemini import get_gemini, text_block
 from app.prompts import data_block, profile_v1
 
 log = logging.getLogger(__name__)
@@ -158,7 +158,7 @@ def extract_profile(resume_text: str) -> CvProfile:
             "re-export it from your editor rather than as a scan."
         )
 
-    profile = get_claude().call_structured(
+    profile = get_gemini().call_structured(
         schema=CvProfile,
         system=profile_v1.SYSTEM,
         content=[text_block(data_block("resume_text", text[:MAX_CHARS]))],

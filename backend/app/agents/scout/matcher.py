@@ -21,7 +21,7 @@ from app.agents.analyst import scoring
 from app.agents.analyst.schemas import Deduction, ExperienceFit, Fit, Requirement
 from app.sources.base import JobPosting
 
-from .llm import OpenRouter, OpenRouterError
+from .llm import ScoutModel, ScoutModelError
 from .prefilter import Candidate
 
 log = logging.getLogger(__name__)
@@ -106,7 +106,7 @@ def _truncate(text: str, limit: int = 6000) -> str:
     return text if len(text) <= limit else text[:limit] + "\n[...truncated]"
 
 
-def match_one(client: OpenRouter, resume_text: str, candidate: Candidate) -> Match:
+def match_one(client: ScoutModel, resume_text: str, candidate: Candidate) -> Match:
     """Score a single job. Never raises -- a failed job must not end the scan."""
     job = candidate.job
     user = (
@@ -117,7 +117,7 @@ def match_one(client: OpenRouter, resume_text: str, candidate: Candidate) -> Mat
 
     try:
         result = client.complete_json(schema=_MatchCall, system=SYSTEM, user=user)
-    except OpenRouterError as exc:
+    except ScoutModelError as exc:
         log.warning("match failed for %s @ %s: %s", job.title, job.company, exc)
         return Match(
             job=job, score=0.0, requirements=[],
@@ -141,7 +141,7 @@ def match_one(client: OpenRouter, resume_text: str, candidate: Candidate) -> Mat
 
 
 def match_all(
-    client: OpenRouter,
+    client: ScoutModel,
     resume_text: str,
     candidates: list[Candidate],
     *,

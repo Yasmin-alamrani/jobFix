@@ -19,7 +19,7 @@ from sqlalchemy.orm import Session
 from app.agents.analyst import tailor
 from app.agents.analyst.profile import CvProfile
 from app.agents.analyst.provenance import PLACEHOLDER
-from app.api.resumes import claude_errors, ensure_profile, owned_resume
+from app.api.resumes import model_errors, ensure_profile, owned_resume
 from app.core.config import get_settings
 from app.core.ratelimit import analysis_limit
 from app.models.db import get_db
@@ -169,14 +169,14 @@ def _owned_version(db: Session, version_id: str) -> CvVersion:
 
 @router.post("/tailor", response_model=ProposalOut, dependencies=[Depends(analysis_limit)])
 def create_proposal(request: TailorRequest, db: Session = Depends(get_db)) -> ProposalOut:
-    """Propose edits for one job. One Claude call; the result is stored so that
+    """Propose edits for one job. One model call; the result is stored so that
     accepting edits later refers to exactly what was reviewed."""
     resume = owned_resume(db, request.resume_id)
     job = _resolve_job(db, request)
     stored = ensure_profile(db, resume)
     profile = CvProfile.model_validate(stored.profile)
 
-    with claude_errors("tailoring"):
+    with model_errors("tailoring"):
         proposal = tailor.propose(
             profile, job_title=job.title, company=job.company,
             job_description=job.description,

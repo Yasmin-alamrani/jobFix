@@ -475,6 +475,55 @@ td a:hover { text-decoration-color: var(--blueprint); }
   margin: 2rem 0 0.875rem;
 }
 
+/* The review. Finding titles are <strong>, not <h3>: `.profile h3` styles the
+   small uppercase section labels and would otherwise restyle every card title. */
+.review-tally { font-family: var(--mono); font-size: 0.75rem; color: var(--ink-3); margin: 0.5rem 0 0; }
+.finding-title { font-size: 0.9375rem; font-weight: 600; }
+.area {
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  margin: 0.25rem 0 0;
+}
+.review .fix + .fix { margin-top: 0.375rem; }
+/* Quotes and check evidence are short prose, not code: wrap rather than make a
+   phone scroll sideways inside the box to read the end of a sentence. */
+.review .evidence { white-space: pre-wrap; overflow-wrap: anywhere; }
+/* The field card's head holds a score, a label and a note; on a phone they
+   cannot share one line, and the note must not push the page wider. */
+.field-fits .finding-head { flex-wrap: wrap; }
+.field-fits .via { white-space: normal; }
+.review .finding .note { margin-top: 0.5rem; }
+mark.slot {
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+  color: var(--ink);
+  border-radius: 3px;
+  padding: 0 0.2em;
+}
+.strengths { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.625rem; }
+.strengths li {
+  background: var(--card);
+  border: 1px solid var(--rule);
+  border-left: 3px solid var(--earned);
+  border-radius: var(--radius);
+  padding: 0.75rem 1rem;
+  font-size: 0.875rem;
+}
+.strengths .q { display: block; font-family: var(--mono); font-size: 0.75rem; color: var(--ink-3); margin-top: 0.25rem; }
+.retry { margin-top: 0.5rem; }
+.read-back { margin-top: 2rem; }
+.read-back > summary {
+  cursor: pointer;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-3);
+}
+.read-back[open] > summary { margin-bottom: 1rem; }
+
 .entities section { margin-bottom: 1.75rem; }
 .entities h4 {
   font-size: 0.875rem;

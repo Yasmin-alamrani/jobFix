@@ -45,6 +45,31 @@ DEFAULT_LANGUAGE = "en"
 # in either language, for the case where a caller overrides the language.
 _VIA_SUFFIX = re.compile(r"\s*[•·]\s*(?:via|عبر)\s+.*$", re.I)
 
+COUNTRY_NAMES = {
+    "sa": "Saudi Arabia", "ae": "United Arab Emirates", "qa": "Qatar", "om": "Oman",
+    "kw": "Kuwait", "bh": "Bahrain", "eg": "Egypt", "jo": "Jordan",
+    "gb": "United Kingdom", "us": "United States",
+}
+
+
+def _with_country(location: str, code: str | None) -> str:
+    """The location with its country spelled out.
+
+    Google gives a Saudi role as "Ad Dammām, EAS" -- city and province code, no
+    country -- so a location filter for "saudi" dropped every one of them, even
+    though the search itself asked for Saudi Arabia. Every row carries its
+    country code, so the name is added from that.
+    """
+    name = COUNTRY_NAMES.get((code or "").lower())
+    if not name or name.lower() in location.lower():
+        return location
+    parts = [p.strip() for p in location.split(",") if p.strip()]
+    if parts and parts[-1].upper() == (code or "").upper():
+        parts[-1] = name                    # "Riyadh, SA" -> "Riyadh, Saudi Arabia"
+    else:
+        parts.append(name)
+    return ", ".join(parts)
+
 
 class JSearchError(RuntimeError):
     """The aggregator refused or failed the request."""
@@ -84,6 +109,7 @@ def _to_posting(job: dict) -> JobPosting | None:
     if not location:
         parts = (job.get("job_city"), job.get("job_state"), job.get("job_country"))
         location = ", ".join(p for p in parts if p)
+    location = _with_country(location, job.get("job_country"))
 
     return JobPosting(
         title=title,
@@ -115,6 +141,10 @@ class JSearch:
             )
         self._key = api_key
         self._base = base_url
+        # Why the last search stopped early, in words for the user; empty when
+        # it did not. Failures return what was gathered rather than raising, so
+        # without this "the quota is spent" and "Google has nothing" look alike.
+        self.last_problem = ""
 
     def search(
         self,
@@ -140,6 +170,7 @@ class JSearch:
         wanted = {p.lower() for p in publishers} if publishers else None
         out: list[JobPosting] = []
         cursor: str | None = None
+        self.last_problem = ""
 
         for _ in range(max(1, pages)):
             params: dict[str, Any] = {
@@ -160,6 +191,7 @@ class JSearch:
                     )
             except httpx.HTTPError as exc:
                 log.warning("jsearch request failed: %s", exc)
+                self.last_problem = "the request did not go through. Try again shortly."
                 break
 
             if r.status_code in (401, 403):
@@ -168,15 +200,21 @@ class JSearch:
                 )
             if r.status_code == 429:
                 log.warning("jsearch quota exhausted")
+                self.last_problem = (
+                    "the JSearch quota is used up (the free plan allows 200 searches a "
+                    "month). It resets monthly."
+                )
                 break
             if r.status_code != 200:
                 log.warning("jsearch returned %s", r.status_code)
+                self.last_problem = f"JSearch returned an error ({r.status_code})."
                 break
 
             try:
                 data = r.json().get("data") or {}
             except ValueError:
                 log.warning("jsearch returned non-JSON")
+                self.last_problem = "JSearch sent back a response that could not be read."
                 break
 
             # search-v2 nests the list under `data.jobs`; older shapes put a

@@ -43,7 +43,7 @@ def _profile(**overrides) -> CvProfile:
     return CvProfile(**base)
 
 
-class StubClaude:
+class StubModel:
     def __init__(self, result: CvProfile):
         self.result = result
         self.calls: list[dict] = []
@@ -55,9 +55,9 @@ class StubClaude:
 
 @pytest.fixture
 def stub(monkeypatch):
-    def install(result: CvProfile) -> StubClaude:
-        client = StubClaude(result)
-        monkeypatch.setattr(profile_mod, "get_claude", lambda: client)
+    def install(result: CvProfile) -> StubModel:
+        client = StubModel(result)
+        monkeypatch.setattr(profile_mod, "get_gemini", lambda: client)
         return client
 
     return install

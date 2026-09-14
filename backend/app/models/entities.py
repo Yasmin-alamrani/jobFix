@@ -44,6 +44,9 @@ class Resume(Base):
     profile: Mapped["StoredProfile | None"] = relationship(
         back_populates="resume", cascade="all, delete-orphan", uselist=False
     )
+    review: Mapped["StoredReview | None"] = relationship(
+        back_populates="resume", cascade="all, delete-orphan", uselist=False
+    )
     # Tailoring proposals and saved versions are copies of the CV's contents,
     # so deleting the CV has to take them too -- otherwise "delete my data"
     # would leave the data behind in a different table.
@@ -76,7 +79,7 @@ class Analysis(Base):
 class StoredProfile(Base):
     """The CV read into entities, cached per resume.
 
-    Extraction is a Claude call, and the same CV always yields the same profile,
+    Extraction is a model call, and the same CV always yields the same profile,
     so it is computed once on first request and read from here afterwards --
     by the audit, by field matching, and later by tailoring and export.
 
@@ -99,6 +102,29 @@ class StoredProfile(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
     resume: Mapped["Resume"] = relationship(back_populates="profile")
+
+
+class StoredReview(Base):
+    """A CV's job-independent review -- weak areas and fixes -- cached per resume.
+
+    Its own table rather than a column on `cv_profiles`: the schema is created
+    with `create_all`, which adds new tables to an existing database but never
+    new columns to an existing table.
+    """
+
+    __tablename__ = "cv_reviews"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(String(64), index=True)
+    resume_id: Mapped[str] = mapped_column(
+        ForeignKey("resumes.id", ondelete="CASCADE"), index=True, unique=True
+    )
+
+    review: Mapped[dict] = mapped_column(JSON)       # full CvReview
+    prompt_version: Mapped[str] = mapped_column(String(64), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+    resume: Mapped["Resume"] = relationship(back_populates="review")
 
 
 class TailorProposal(Base):

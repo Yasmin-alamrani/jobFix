@@ -10,7 +10,7 @@ import pytest
 
 from app.agents.scout.browser import Page
 from app.agents.scout.extract import Extracted, from_json_ld, from_page
-from app.agents.scout.llm import OpenRouterError
+from app.agents.scout.llm import ScoutModelError
 
 JSON_LD = """
 <html><head>
@@ -167,7 +167,7 @@ def test_a_title_less_result_is_rejected():
 
 
 def test_model_failure_returns_none_rather_than_raising():
-    client = StubClient(error=OpenRouterError("no credit"))
+    client = StubClient(error=ScoutModelError("no credit"))
     assert from_page(_page("Backend Engineer"), client) is None
 
 

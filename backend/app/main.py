@@ -48,7 +48,6 @@ def health() -> dict:
     settings = get_settings()
     return {
         "status": "ok",
-        "model": settings.claude_model,
-        "claude_key_configured": bool(settings.anthropic_api_key),
-        "openrouter_key_configured": bool(settings.openrouter_api_key),
+        "model": settings.gemini_model,
+        "gemini_key_configured": bool(settings.gemini_api_key),
     }

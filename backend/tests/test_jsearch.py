@@ -78,7 +78,7 @@ def test_maps_fields_and_skips_untitled_rows(monkeypatch):
     j = jobs[0]
     assert j.title == "Senior Backend Engineer"
     assert j.company == "Tamara"
-    assert j.location == "Riyadh, SA"
+    assert j.location == "Riyadh, Saudi Arabia"     # the code spelled out
     assert j.publisher == "LinkedIn"
     assert j.source == "jsearch"
     assert j.posted_at is not None
@@ -157,7 +157,57 @@ def test_network_failure_does_not_propagate(monkeypatch):
         return real_client(*a, **kw)
 
     monkeypatch.setattr(httpx, "Client", fake_client)
-    assert JSearch("k").search("engineer") == []
+    client = JSearch("k")
+    assert client.search("engineer") == []
+    assert "did not go through" in client.last_problem
+
+
+# --- locations and reasons, from the second live call ------------------------
+
+def test_the_country_is_spelled_out_where_google_leaves_it_off():
+    """Google gives Saudi roles as "Ad Dammām, EAS" -- city and province code.
+
+    With the default "saudi, riyadh" location filter, that dropped every Google
+    result, although the search itself asked for Saudi Arabia.
+    """
+    from app.sources.jsearch import _to_posting
+    job = _to_posting({"job_title": "X", "job_location": "Ad Dammām, EAS", "job_country": "SA"})
+    assert job.location == "Ad Dammām, EAS, Saudi Arabia"
+
+
+def test_a_country_already_named_or_unknown_is_left_alone():
+    from app.sources.jsearch import _to_posting
+    named = _to_posting({"job_title": "X", "job_location": "Riyadh, Saudi Arabia",
+                         "job_country": "SA"})
+    unknown = _to_posting({"job_title": "X", "job_location": "Lagos, LA", "job_country": "NG"})
+    assert named.location == "Riyadh, Saudi Arabia"
+    assert unknown.location == "Lagos, LA"
+
+
+def test_google_roles_survive_the_default_location_filter():
+    from app.agents.scout.prefilter import rank
+    from app.sources.jsearch import _to_posting
+    rows = [
+        {"job_title": "Backend Engineer", "job_location": "Ad Dammām, EAS",
+         "job_country": "SA", "job_description": "Python APIs"},
+        {"job_title": "Backend Engineer", "employer_name": "Other", "job_location": "Anywhere, EAS",
+         "job_country": "SA", "job_is_remote": True, "job_description": "Python APIs"},
+    ]
+    jobs = [_to_posting(r) for r in rows]
+    kept = rank("Backend engineer. Python, APIs.", jobs, locations={"saudi", "riyadh"})
+    assert len(kept) == 2
+
+
+def test_a_spent_quota_is_explained(monkeypatch):
+    client = _client(monkeypatch, status=429)
+    client.search("engineer")
+    assert "quota" in client.last_problem
+
+
+def test_a_successful_search_leaves_no_problem(monkeypatch):
+    client = _client(monkeypatch)
+    client.search("engineer")
+    assert client.last_problem == ""
 
 
 # --- regressions from the first live call ------------------------------------

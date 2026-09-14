@@ -33,7 +33,7 @@ def candidate(**overrides) -> FieldCandidate:
     return FieldCandidate(**base)
 
 
-class StubClaude:
+class StubModel:
     def __init__(self, result):
         self.result = result
         self.calls: list[dict] = []
@@ -45,9 +45,9 @@ class StubClaude:
 
 @pytest.fixture
 def stub(monkeypatch):
-    def install(*candidates) -> StubClaude:
-        client = StubClaude(FieldCandidates(fields=list(candidates)))
-        monkeypatch.setattr(fields_mod, "get_claude", lambda: client)
+    def install(*candidates) -> StubModel:
+        client = StubModel(FieldCandidates(fields=list(candidates)))
+        monkeypatch.setattr(fields_mod, "get_gemini", lambda: client)
         return client
 
     return install

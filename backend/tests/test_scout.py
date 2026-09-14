@@ -10,7 +10,11 @@ from app.agents.analyst.schemas import ExperienceFit, Fit, Importance, Requireme
 from app.agents.scout import brief as brief_mod
 from app.agents.scout import runner as runner_mod
 from app.agents.scout.brief import WORTH_IT, build
-from app.agents.scout.llm import OpenRouter, OpenRouterError
+from google.genai import errors as genai_errors
+from google.genai import types as genai_types
+
+from app.agents.scout.llm import ScoutModel, ScoutModelError
+from app.core.gemini import GeminiClient
 from app.agents.scout.matcher import MATCH_MAX, Match, match_all, match_one
 from app.agents.scout.prefilter import Candidate
 from app.agents.scout.runner import ScoutRequest
@@ -63,14 +67,14 @@ WEAK = {
 
 
 class StubClient:
-    """Stands in for OpenRouter. Returns queued payloads in order."""
+    """Stands in for the scout's model. Returns queued payloads in order."""
 
     def __init__(self, *payloads):
         self.payloads = list(payloads)
         self.calls = []
 
     def complete_json(self, *, schema, system, user, **kw):
-        self.calls.append({"system": system, "user": user})
+        self.calls.append({"system": system, "user": user, **kw})
         payload = self.payloads.pop(0) if self.payloads else STRONG
         if isinstance(payload, Exception):
             raise payload
@@ -121,7 +125,7 @@ def test_prompt_forbids_fabrication():
 
 
 def test_a_failed_job_does_not_end_the_scan():
-    c = StubClient(OpenRouterError("boom"), STRONG)
+    c = StubClient(ScoutModelError("boom"), STRONG)
     matches = match_all(c, CV, [_cand(_job("A")), _cand(_job("B"))], limit=2)
     assert len(matches) == 2
     assert sum(m.ok for m in matches) == 1
@@ -204,62 +208,101 @@ def test_brief_costs_nothing_without_a_client():
 def test_headline_failure_leaves_the_brief_usable():
     class Boom:
         def complete_json(self, **kw):
-            raise OpenRouterError("no credit")
+            raise ScoutModelError("no credit")
     b = build([_match(80)], total_found=1, client=Boom())
     assert b.headline == ""
     assert "Backend Engineer" in b.render()
 
 
-# --- llm client --------------------------------------------------------------
+# --- thinking levels -----------------------------------------------------------
 
-def _http(monkeypatch, content, status=200):
-    def handler(request):
-        if status != 200:
-            return httpx.Response(status, text="err")
-        return httpx.Response(200, json={"choices": [{"message": {"content": content}}]})
+def test_matching_thinks_as_hard_as_the_match_tab():
+    """No override: matching runs at the analyst's level, so the two agree."""
+    c = StubClient(STRONG)
+    match_one(c, CV, _cand())
+    assert c.calls[0].get("effort") is None
 
-    real = httpx.Client
-    monkeypatch.setattr(
-        httpx, "Client",
-        lambda *a, **kw: real(*a, **{**kw, "transport": httpx.MockTransport(handler)}),
-    )
-    return OpenRouter("k")
+
+def test_the_headline_is_a_cheap_call():
+    c = StubClient({"headline": "Two strong fits."})
+    assert build([_match(80)], total_found=1, client=c).headline == "Two strong fits."
+    assert c.calls[0]["effort"] == "low"
+
+
+# --- model adapter ---------------------------------------------------------------
+
+class _Sdk:
+    """The Gemini SDK, one level down, so the adapter's real handling runs."""
+
+    def __init__(self, *replies):
+        self.models = self
+        self.replies = list(replies)
+        self.configs = []
+
+    def generate_content(self, *, model, contents, config):
+        self.configs.append(config)
+        reply = self.replies.pop(0)
+        if isinstance(reply, Exception):
+            raise reply
+        return genai_types.GenerateContentResponse.model_validate({"candidates": [{
+            "content": {"role": "model", "parts": [{"text": reply}]},
+            "finish_reason": "STOP",
+        }]})
+
+
+def _model(*replies):
+    sdk = _Sdk(*replies)
+    gemini = GeminiClient(api_key="k", model="gemini-3.8-flash", thinking="high", client=sdk)
+    return ScoutModel(gemini), sdk
 
 
 class _Shape(brief_mod._Headline):
     pass
 
 
-def test_json_wrapped_in_a_code_fence_is_recovered(monkeypatch):
-    c = _http(monkeypatch, '```json\n{"headline": "thin batch"}\n```')
-    assert c.complete_json(schema=_Shape, system="s", user="u").headline == "thin batch"
+def test_the_adapter_returns_the_validated_object():
+    model, _ = _model('{"headline": "thin batch"}')
+    assert model.complete_json(schema=_Shape, system="s", user="u").headline == "thin batch"
 
 
-def test_json_with_leading_prose_is_recovered(monkeypatch):
-    c = _http(monkeypatch, 'Sure! {"headline": "ok"}')
-    assert c.complete_json(schema=_Shape, system="s", user="u").headline == "ok"
+def test_effort_reaches_gemini_as_a_thinking_level():
+    model, sdk = _model('{"headline": "a"}', '{"headline": "b"}')
+    model.complete_json(schema=_Shape, system="s", user="u")
+    model.complete_json(schema=_Shape, system="s", user="u", effort="low")
+    levels = [c.thinking_config.thinking_level for c in sdk.configs]
+    assert levels == [genai_types.ThinkingLevel.HIGH, genai_types.ThinkingLevel.LOW]
 
 
 def test_missing_key_fails_with_a_usable_message():
-    with pytest.raises(OpenRouterError) as exc:
-        OpenRouter("")
-    assert "openrouter.ai/keys" in str(exc.value)
+    model = ScoutModel(GeminiClient(api_key="", model="gemini-3.8-flash", thinking="high"))
+    assert not model.has_credentials
+    with pytest.raises(ScoutModelError, match="GEMINI_API_KEY"):
+        model.complete_json(schema=_Shape, system="s", user="u")
 
 
-@pytest.mark.parametrize("status,expected", [
-    (401, "rejected the API key"), (402, "out of credit"), (429, "Rate limited"),
+def _api_error(cls, code, status, message):
+    return cls(code, {"error": {"code": code, "status": status, "message": message}})
+
+
+@pytest.mark.parametrize("error,expected", [
+    (_api_error(genai_errors.ClientError, 400, "INVALID_ARGUMENT", "API key not valid."),
+     "rejected the API key"),
+    (_api_error(genai_errors.ClientError, 429, "RESOURCE_EXHAUSTED", "Quota exceeded."),
+     "rate limit or quota"),
+    (_api_error(genai_errors.ServerError, 503, "UNAVAILABLE", "Overloaded."), "overloaded"),
+    (httpx.ConnectError("no route"), "Could not reach"),
 ])
-def test_http_errors_are_translated(monkeypatch, status, expected):
-    c = _http(monkeypatch, "", status=status)
-    with pytest.raises(OpenRouterError) as exc:
-        c.complete_json(schema=_Shape, system="s", user="u")
-    assert expected in str(exc.value)
+def test_failures_are_translated(error, expected):
+    model, _ = _model(error)
+    with pytest.raises(ScoutModelError, match=expected):
+        model.complete_json(schema=_Shape, system="s", user="u")
 
 
-def test_unparseable_output_retries_then_gives_up(monkeypatch):
-    c = _http(monkeypatch, "not json at all")
-    with pytest.raises(OpenRouterError):
-        c.complete_json(schema=_Shape, system="s", user="u", retries=1)
+def test_unparseable_output_retries_then_gives_up():
+    model, sdk = _model("not json at all", "still not json")
+    with pytest.raises(ScoutModelError, match="valid _Shape"):
+        model.complete_json(schema=_Shape, system="s", user="u", retries=1)
+    assert len(sdk.configs) == 2
 
 
 # --- runner ------------------------------------------------------------------
@@ -274,6 +317,90 @@ def test_jsearch_is_skipped_without_a_key(monkeypatch):
     monkeypatch.setattr(runner_mod, "scan_ats", lambda **kw: [_job()])
     req = ScoutRequest(resume_text=CV, include_jsearch=True)
     assert len(runner_mod.collect(req, jsearch_key="")) == 1
+
+
+# --- what the user is told about Google --------------------------------------------
+
+class _FakeJSearch:
+    """Stands in for the JSearch class: called with a key, then searched."""
+
+    def __init__(self, found, problem=""):
+        self.found, self.problem, self.query = found, problem, None
+
+    def __call__(self, key):
+        self.last_problem = ""
+        return self
+
+    def search(self, query, **kw):
+        self.query, self.last_problem = query, self.problem
+        return self.found
+
+    linkedin_only = search
+
+
+def _collect_with_google(monkeypatch, fake, **request):
+    import app.sources.jsearch as jsearch_mod
+    monkeypatch.setattr(runner_mod, "scan_ats", lambda **kw: [_job()])
+    monkeypatch.setattr(jsearch_mod, "JSearch", fake)
+    notes: list[str] = []
+    jobs = runner_mod.collect(ScoutRequest(resume_text=CV, include_jsearch=True, **request),
+                              jsearch_key="k", notes=notes)
+    return jobs, notes
+
+
+def test_a_missing_google_key_is_reported(monkeypatch):
+    monkeypatch.setattr(runner_mod, "scan_ats", lambda **kw: [_job()])
+    notes: list[str] = []
+    runner_mod.collect(ScoutRequest(resume_text=CV, include_jsearch=True), jsearch_key="",
+                       notes=notes)
+    assert "JSEARCH_API_KEY" in notes[0]
+
+
+def test_a_spent_google_quota_is_reported(monkeypatch):
+    _, notes = _collect_with_google(monkeypatch, _FakeJSearch([], problem="the quota is used up."))
+    assert notes == ["Google for Jobs: the quota is used up."]
+
+
+def test_no_google_results_names_what_was_searched(monkeypatch):
+    _, notes = _collect_with_google(monkeypatch, _FakeJSearch([]), jsearch_query="Backend Engineer")
+    assert "“Backend Engineer”" in notes[0]
+
+
+def test_google_results_are_added_without_a_note(monkeypatch):
+    fake = _FakeJSearch([_job("Data Engineer", company="Rain")])
+    jobs, notes = _collect_with_google(monkeypatch, fake)
+    assert len(jobs) == 2 and notes == []
+
+
+def test_a_google_failure_does_not_end_the_scan(monkeypatch):
+    class Broken:
+        def __init__(self, key):
+            raise RuntimeError("JSearch rejected the API key.")
+
+    jobs, notes = _collect_with_google(monkeypatch, Broken)
+    assert len(jobs) == 1
+    assert "rejected the API key" in notes[0]
+
+
+def test_google_is_searched_for_the_latest_title_on_the_cv():
+    """With no role typed, the query comes from the CV, not "software engineer"."""
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import Session
+
+    from app.api.scout import _latest_title
+    from app.models.db import Base
+    from app.models.entities import Resume, StoredProfile
+
+    engine = create_engine("sqlite://")
+    Base.metadata.create_all(engine)
+    with Session(engine) as db:
+        db.add(Resume(id="r1", user_id="local", filename="cv.pdf", stored_path="x",
+                      content_type="application/pdf"))
+        db.add(StoredProfile(user_id="local", resume_id="r1", profile={
+            "experience": [{"title": " "}, {"title": "Senior Backend Engineer"}]}))
+        db.commit()
+        assert _latest_title(db, "r1") == "Senior Backend Engineer"
+        assert _latest_title(db, "missing") == ""
 
 
 def test_run_produces_a_brief_end_to_end(monkeypatch):

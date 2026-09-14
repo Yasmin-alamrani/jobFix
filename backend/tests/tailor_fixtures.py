@@ -141,7 +141,7 @@ def call(*edits: ProposedEdit, gaps=()) -> TailorCall:
     return TailorCall(edits=list(edits), gaps=list(gaps))
 
 
-class StubClaude:
+class StubModel:
     def __init__(self, result) -> None:
         self.result = result
         self.calls: list[dict] = []
@@ -176,8 +176,8 @@ def tailor_client(tmp_path, monkeypatch):
     from app.api import resumes as resumes_mod
 
     monkeypatch.setattr(resumes_mod, "extract_profile", lambda text: ORIGINAL)
-    stub = StubClaude(call(*LEGIT, *CANARY_EDITS, gaps=GAPS))
-    monkeypatch.setattr(tailor_mod, "get_claude", lambda: stub)
+    stub = StubModel(call(*LEGIT, *CANARY_EDITS, gaps=GAPS))
+    monkeypatch.setattr(tailor_mod, "get_gemini", lambda: stub)
 
     from app.main import app
     with TestClient(app) as client:

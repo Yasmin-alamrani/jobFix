@@ -110,7 +110,7 @@ def targeting_stub(monkeypatch):
 
     stub = Stub()
     stub.calls = []
-    monkeypatch.setattr(targeting_mod, "get_claude", lambda: stub)
+    monkeypatch.setattr(targeting_mod, "get_gemini", lambda: stub)
     return stub
 
 
@@ -157,7 +157,8 @@ SEARCH_JOBS = [
 @pytest.fixture
 def searchable(tailor_client, monkeypatch):
     from app.api import scout as scout_mod
-    monkeypatch.setattr(scout_mod, "collect", lambda request, jsearch_key="": list(SEARCH_JOBS))
+    monkeypatch.setattr(scout_mod, "collect",
+                        lambda request, jsearch_key="", notes=None: list(SEARCH_JOBS))
     return upload(tailor_client)
 
 
@@ -223,7 +224,7 @@ def test_the_audit_asks_for_categories_and_records_the_new_prompt(monkeypatch):
                                          fit=Fit.UNDER),
             )
 
-    monkeypatch.setattr(analyzer, "get_claude", lambda: Stub())
+    monkeypatch.setattr(analyzer, "get_gemini", lambda: Stub())
     result = analyzer.analyze(resume_path=FIXTURES / "clean_single_column.pdf",
                               job_description=DESCRIPTION)
     assert "`certification`" in calls[0] and "visa" in calls[0]

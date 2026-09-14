@@ -20,8 +20,8 @@ beside it.
 | `Requirement{skill, importance, status, evidence}` | Already must-have vs nice-to-have with evidence. Job-URL analysis renders it. |
 | `analyst/parser.py` → `ParseReport` | Deterministic ATS facts, incl. Arabic ratio and bilingual detection. Export reuses the language signal. |
 | `JobSource` protocol + `sources/` | The provider/adapter interface already exists. New sources implement `fetch(token)`; nothing else changes. |
-| `core/claude.py::call_structured` | Schema-validated Claude calls. Every new Claude feature goes through it. |
-| `scout/llm.py::complete_json` | The same for OpenRouter/DeepSeek, with a repair retry. |
+| `core/gemini.py::call_structured` | Schema-validated model calls, for both agents. (This was `core/claude.py` until the analyst moved from Claude to Gemini Flash; the interface stayed the same.) |
+| `scout/llm.py::complete_json` | The scout's side of the same client: one prompt string in, one validated object out. (It called DeepSeek through OpenRouter until the scout moved to Gemini as well.) |
 
 **Missing, and therefore the work:** structured CV entities, field suggestion,
 tailoring assembly, CV versions, export, search filters, company targeting,
@@ -93,7 +93,7 @@ Data flow:
 ```
 upload / paste
   → parse_pdf()            unchanged, deterministic ATS facts
-  → extract_profile()      NEW  one Claude call → CvProfile
+  → extract_profile()      NEW  one model call → CvProfile
   → suggest_fields()       NEW  evidence → fit scored in Python
   → analyze()              existing, when a target job is present
 ```
@@ -109,7 +109,7 @@ upload / paste
 **Built**, with two deviations worth recording:
 
 - **Extraction is lazy, not on upload.** Upload fires the moment a file is
-  chosen, and extraction is a multi-second Claude call — doing it there freezes
+  chosen, and extraction is a multi-second model call — doing it there freezes
   the picker before the user has said what they want. The profile is extracted
   on first request to `/profile` and cached, which costs the same one call.
 - **A pasted CV keeps its own text.** The paste is still rendered to a PDF,
@@ -269,7 +269,7 @@ that; it needs doing by hand.
 - **Job-link analysis lives in the audit tab, not the scout's `from-url`.** The
   audit already produces the requirement-by-requirement table with a verbatim
   quote per requirement, so a posting URL now fills the audit form
-  (`POST /api/jobs/fetch`) and the full Claude analysis runs on it. The
+  (`POST /api/jobs/fetch`) and the full analysis runs on it. The
   scout's quick `from-url` score is unchanged. Requirements now carry a
   category — skill, experience, education, certification, language,
   location/visa — which needed a prompt change, so it shipped as
@@ -334,8 +334,8 @@ Confirmed during planning:
 | LinkedIn access | Logged out, public pages only — your account is never attached |
 | Sites | LinkedIn, Bayt, public ATS boards, company career pages |
 | Runtime | Local Playwright on your Mac, behind an interface so a hosted runner can swap in later |
-| Reasoning model | `deepseek/deepseek-v4-flash` via OpenRouter |
-| Vision fallback | `google/gemini-3.7-flash` computer use, only where DOM extraction fails |
+| Reasoning model | Gemini Flash, through the analyst's client (originally `deepseek/deepseek-v4-flash` via OpenRouter) |
+| Vision fallback | Gemini Flash reading a screenshot, only where DOM extraction fails |
 
 ---
 
@@ -361,6 +361,13 @@ what makes browser agents expensive.
 
 DeepSeek flash is ~8× cheaper on input and ~21× cheaper on output than Gemini
 3.7 Flash. Keeping it on the text path is worth real money at volume.
+
+> **Superseded.** The scout now runs on Gemini Flash, the same model and key as
+> the analyst. At this app's volume — one call per shortlisted job — the saving
+> was cents per search, and it bought a second AI provider receiving the CV, a
+> second key, and a second model reading requirements that could disagree with
+> the Match tab. This section, and the costs in the tier table below, record
+> why DeepSeek was chosen at first.
 
 ### 2. Gemini 2.5 Computer Use is legacy
 
@@ -421,8 +428,8 @@ backend/app/agents/scout/
   policy.py        domain allowlist, robots.txt, rate limits
   extract.py       JSON-LD first, model fallback -> normalized JobPosting
   intake.py        paste-a-URL, escalating cheapest-first
-  llm.py           OpenRouter client (DeepSeek)
-  vision.py        Gemini 3.7 Flash screenshot fallback
+  llm.py           adapter over the shared Gemini client (was OpenRouter/DeepSeek)
+  vision.py        Gemini Flash screenshot fallback
 backend/app/sources/
   ats.py           Tier 0: Greenhouse / Lever / Ashby adapters
   registry.py      + data/companies.yaml -- the company list
@@ -450,7 +457,7 @@ public job endpoints. Every company moved into Tier 0 is one the browser never
 has to visit.
 
 **Extraction is not an LLM job.** Where a page publishes schema.org `JobPosting`
-JSON-LD, parse it directly. Spending DeepSeek tokens to re-derive fields a page
+JSON-LD, parse it directly. Spending model tokens to re-derive fields a page
 already states in machine-readable form is waste. The LLM's job is *matching and
 briefing*, not extraction.
 

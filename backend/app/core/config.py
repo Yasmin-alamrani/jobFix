@@ -10,19 +10,20 @@ class Settings(BaseSettings):
         env_file=".env", env_file_encoding="utf-8", extra="ignore"
     )
 
-    # --- Claude ---
-    anthropic_api_key: str = ""
-    claude_model: str = "claude-opus-5"
-    claude_effort: str = "high"
+    # --- Gemini (both agents: the analyst, and the scout's scoring) ---
+    gemini_api_key: str = ""
+    # 3.6 rather than the newer 3.8: on 14 Sep 2026 3.8 answered every request
+    # with 503 "high demand" and 3.7 hung, while 3.6 replied in seconds. All
+    # three are stable and priced the same. Override with GEMINI_MODEL.
+    gemini_model: str = "gemini-3.6-flash"
+    gemini_thinking: str = "high"  # low | medium | high
 
     # --- Storage ---
     database_url: str = "sqlite:///./jobhunt.db"  # point at Postgres for production
     upload_dir: Path = Path("./storage/uploads")
 
     # --- Scout agent (Agent 2) ---
-    openrouter_api_key: str = ""
-    scout_model: str = "deepseek/deepseek-v4-flash"
-    scout_vision_model: str = "google/gemini-3.7-flash"
+    # Its model calls use the Gemini settings above; only job sources live here.
 
     # Google for Jobs, via JSearch. This is how LinkedIn roles reach us:
     # LinkedIn syndicates to Google on purpose, so we read the aggregation

@@ -119,6 +119,15 @@ export async function getFields(
   );
 }
 
+/* Weak areas and fixes, with no job in mind. Cached server-side per CV. */
+export async function getReview(
+  resumeId: string,
+): Promise<{ resume_id: string; review: import('./types').CvReview }> {
+  return shared(`review:${resumeId}`, async () =>
+    unwrap(await fetch(`${BASE}/api/resumes/${resumeId}/review`)),
+  );
+}
+
 /* Deletes the CV, its file on disk, and everything derived from it. Answers
    204, so there is no body to unwrap. */
 export async function deleteResume(resumeId: string): Promise<void> {

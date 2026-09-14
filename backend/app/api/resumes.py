@@ -8,7 +8,6 @@ import uuid
 from collections.abc import Iterator
 from pathlib import Path
 
-import anthropic
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile
 from pydantic import BaseModel
 from sqlalchemy.exc import IntegrityError
@@ -19,12 +18,13 @@ from app.agents.analyst.fields import suggest_fields
 from app.agents.analyst.industries import PACKS
 from app.agents.analyst.parser import parse_pdf
 from app.agents.analyst.profile import CvProfile, ProfileError, extract_profile
-from app.core.claude import MissingCredentialsError, RefusalError
+from app.agents.analyst.review import review_cv
+from app.core.gemini import FAILURES, explain
 from app.core.config import get_settings
 from app.core.ratelimit import analysis_limit, upload_limit
 from app.models.db import get_db
-from app.models.entities import Analysis, Resume, StoredProfile
-from app.prompts import profile_v1
+from app.models.entities import Analysis, Resume, StoredProfile, StoredReview
+from app.prompts import profile_v1, review_v1
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["resumes"])
@@ -37,26 +37,20 @@ MAX_BYTES = 15 * 1024 * 1024
 
 
 @contextlib.contextmanager
-def claude_errors(what: str) -> Iterator[None]:
-    """Map SDK failures onto status codes that mean something to the caller.
+def model_errors(what: str) -> Iterator[None]:
+    """Map model failures onto status codes that mean something to the caller.
 
-    Three endpoints call Claude, and each needs the same mapping. Inlining it
-    per endpoint is how one of them quietly ends up reporting an auth failure as
-    a 500 and sending the user to debug the wrong thing.
+    Every endpoint that calls Gemini needs the same mapping. Inlining it per
+    endpoint is how one of them quietly ends up reporting an auth failure as a
+    500 and sending the user to debug the wrong thing.
     """
     try:
         yield
-    except RefusalError as exc:
-        raise HTTPException(422, str(exc)) from exc
-    except (MissingCredentialsError, anthropic.AuthenticationError) as exc:
-        raise HTTPException(503, str(exc)) from exc
-    except anthropic.RateLimitError as exc:
-        raise HTTPException(429, "Rate limited by the Anthropic API. Try again shortly.") from exc
-    except anthropic.APIConnectionError as exc:
-        raise HTTPException(503, "Could not reach the Anthropic API. Check your connection.") from exc
-    except anthropic.APIStatusError as exc:
-        log.exception("Anthropic returned %s during %s", exc.status_code, what)
-        raise HTTPException(502, f"The Anthropic API returned an error ({exc.status_code}).") from exc
+    except FAILURES as exc:
+        status, message = explain(exc)
+        if status == 502:
+            log.exception("model call failed during %s", what)
+        raise HTTPException(status, message) from exc
     except ProfileError as exc:
         raise HTTPException(422, str(exc)) from exc
     except HTTPException:
@@ -132,7 +126,7 @@ def create_analysis(
             422, "Paste the full job description -- a short snippet can't be matched meaningfully."
         )
 
-    with claude_errors("analysis"):
+    with model_errors("analysis"):
         result = analyze(
             resume_path=Path(resume.stored_path),
             job_description=job_description,
@@ -223,7 +217,7 @@ def ensure_profile(db: Session, resume: Resume) -> StoredProfile:
     if stored is not None:
         return stored
 
-    with claude_errors("profile extraction"):
+    with model_errors("profile extraction"):
         parsed = extract_profile(text_of(resume))
     stored = StoredProfile(
         user_id=resume.user_id,
@@ -285,7 +279,7 @@ def upload_resume_text(
 def get_profile(resume_id: str, db: Session = Depends(get_db)) -> ProfileOut:
     """The CV as structured entities, extracted once and cached.
 
-    Deliberately not done during upload. Extraction is a Claude call of several
+    Deliberately not done during upload. Extraction is a model call of several
     seconds, and upload currently fires the moment a file is chosen -- putting it
     there would freeze the picker before the user has said what they want. The
     same CV always yields the same profile, so computing it on first request and
@@ -317,7 +311,7 @@ def get_fields(resume_id: str, db: Session = Depends(get_db)) -> FieldsOut:
     if stored is not None and stored.fields:
         return FieldsOut(resume_id=resume_id, fields=stored.fields.get("fields", []))
 
-    with claude_errors("field matching"):
+    with model_errors("field matching"):
         fits = suggest_fields(text_of(resume))
 
     payload = [fit.model_dump(mode="json") for fit in fits]
@@ -325,6 +319,48 @@ def get_fields(resume_id: str, db: Session = Depends(get_db)) -> FieldsOut:
         stored.fields = {"fields": payload}
         db.commit()
     return FieldsOut(resume_id=resume_id, fields=payload)
+
+
+class ReviewOut(BaseModel):
+    resume_id: str
+    review: dict
+
+
+@router.get("/resumes/{resume_id}/review", response_model=ReviewOut,
+            dependencies=[Depends(analysis_limit)])
+def get_review(resume_id: str, db: Session = Depends(get_db)) -> ReviewOut:
+    """Weak areas and how to fix them, with no job in mind. Cached per CV.
+
+    A review stored under an older prompt is redone, since it would otherwise
+    keep showing advice the current prompt no longer gives.
+    """
+    resume = owned_resume(db, resume_id)
+    stored = db.query(StoredReview).filter_by(resume_id=resume_id).one_or_none()
+    if stored is not None and stored.prompt_version == review_v1.VERSION:
+        return ReviewOut(resume_id=resume_id, review=stored.review)
+
+    text = text_of(resume)
+    profile = CvProfile.model_validate(ensure_profile(db, resume).profile)
+    # A pasted CV's PDF is our own plain render of it; its layout says nothing.
+    report = None if resume.source_text.strip() else parse_pdf(Path(resume.stored_path))
+
+    with model_errors("CV review"):
+        review = review_cv(text, profile=profile, report=report)
+
+    payload = review.model_dump(mode="json")
+    if stored is None:
+        db.add(StoredReview(user_id=resume.user_id, resume_id=resume.id,
+                            review=payload, prompt_version=review_v1.VERSION))
+    else:
+        stored.review, stored.prompt_version = payload, review_v1.VERSION
+    try:
+        db.commit()
+    except IntegrityError:
+        # Another request reviewed the same CV first -- a second tab, or
+        # React's development mode mounting twice. Its review is as good.
+        db.rollback()
+        payload = db.query(StoredReview).filter_by(resume_id=resume_id).one().review
+    return ReviewOut(resume_id=resume_id, review=payload)
 
 
 @router.delete("/resumes/{resume_id}", status_code=204, response_class=Response)

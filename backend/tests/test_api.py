@@ -67,9 +67,9 @@ def _upload(client) -> str:
 def test_health_reports_model_and_key_status(client):
     body = client.get("/api/health").json()
     assert body["status"] == "ok"
-    assert body["model"] == "claude-opus-5"
-    assert "claude_key_configured" in body
-    assert "openrouter_key_configured" in body
+    assert body["model"] == "gemini-3.6-flash"
+    assert "gemini_key_configured" in body
+    assert "openrouter_key_configured" not in body
 
 
 def test_industries_are_listed(client):

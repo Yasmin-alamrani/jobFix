@@ -2,14 +2,14 @@
 
 Two agents for a Saudi job search:
 
-1. **Resume analyst** — scores a resume against one job posting out of 100 and shows exactly which points it lost and why.
+1. **Resume analyst** — reviews a CV on its own (weak areas, why each one hurts, and what to change, with every quote checked against the CV), and scores it against one job posting out of 100, showing exactly which points it lost and why.
 2. **Job scout** — finds roles across ATS boards and Google for Jobs, ranks them against your CV with the *same* scorer, and writes a short brief. It cannot apply to anything.
 
 Both are built. An earlier plan had Agent 2 emailing companies from a contact dataset; that was dropped in favour of discovery, and its artifacts removed.
 
 ## What makes the score trustworthy
 
-The number is **computed in Python, not produced by the model**. Claude supplies evidence — which requirements exist, which are missing, what reads weakly — and `scoring.py` does the arithmetic. That split means:
+The number is **computed in Python, not produced by the model**. The model (Gemini Flash) supplies evidence — which requirements exist, which are missing, what reads weakly — and `scoring.py` does the arithmetic. That split means:
 
 - Every deduction names a rule, quotes the span it came from, and gives the fix.
 - The same inputs always produce the same score (unit-tested over 20 runs).
@@ -45,12 +45,19 @@ cp backend/.env.example backend/.env
 
 | Key | Needed for | Getting one |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | The resume analyst | [console.anthropic.com](https://console.anthropic.com) |
-| `OPENROUTER_API_KEY` | The scout's evidence-gathering, on the shortlist only — the ranking itself is still computed in Python | [openrouter.ai](https://openrouter.ai) |
+| `GEMINI_API_KEY` | Every AI step, in both agents: reading the CV, matching, tailoring, company targeting, and scoring search results — the scores themselves are still computed in Python | [aistudio.google.com/apikey](https://aistudio.google.com/apikey) — turn on billing before uploading real CVs (see below) |
 | `JSEARCH_API_KEY` | *Optional.* Google for Jobs, which is how LinkedIn roles reach the scan | [openwebninja.com/api/jsearch](https://www.openwebninja.com/api/jsearch) — free tier is 200 requests/month |
 
 Without the JSearch key the scout still runs; it just searches the free ATS
 boards only, and the "Also search Google for Jobs" checkbox does nothing.
+
+**CVs are personal data.** On the Gemini API's free tier, Google may use what
+you send to improve its products and human reviewers may read it; its terms say
+not to send personal information there. With billing turned on for the key's
+project, it does neither. Use the free tier only with made-up CVs.
+
+The server reads `.env` once, at start-up. `--reload` watches code, not `.env`,
+so restart it after changing a key.
 
 Start the API:
 

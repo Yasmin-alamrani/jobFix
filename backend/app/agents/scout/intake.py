@@ -26,7 +26,7 @@ from app.sources.base import JobPosting
 
 from .browser import Page, ReadOnlyBrowser
 from .extract import from_json_ld, from_page
-from .llm import OpenRouter
+from .llm import ScoutModel
 from .policy import USER_AGENT, Policy, PolicyViolation, WallEncountered, looks_like_a_wall
 
 log = logging.getLogger(__name__)
@@ -60,7 +60,7 @@ def _plain_get(url: str) -> str:
 def fetch_one(
     url: str,
     *,
-    client: OpenRouter | None = None,
+    client: ScoutModel | None = None,
     allow_browser: bool = True,
 ) -> JobPosting:
     """Read a single pasted job URL into a JobPosting.
@@ -102,7 +102,8 @@ def fetch_one(
         # problem.
         raise IntakeError(
             "That page publishes no structured job data, so reading it needs the "
-            "model. Add OPENROUTER_API_KEY to backend/.env and restart the server."
+            "model. Add GEMINI_API_KEY to backend/.env and restart the server, or "
+            "paste the job description instead."
         )
     if job is None:
         raise IntakeError(

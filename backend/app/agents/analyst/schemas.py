@@ -1,6 +1,6 @@
 """Shared data contracts.
 
-These serve double duty: they are the JSON schemas Claude must fill, and the
+These serve double duty: they are the JSON schemas the model must fill, and the
 shapes the dashboard renders. Keeping them in one place means a model response
 that would break the UI fails validation at the boundary instead.
 """

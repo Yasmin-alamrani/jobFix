@@ -22,7 +22,7 @@ import logging
 
 from pydantic import BaseModel, Field
 
-from app.core.claude import get_claude, text_block
+from app.core.gemini import get_gemini, text_block
 from app.prompts import data_block, fields_v1
 
 from .industries import PACKS
@@ -188,7 +188,7 @@ def suggest_fields(resume_text: str, *, limit: int = 5) -> list[FieldFit]:
     if not text:
         return []
 
-    result = get_claude().call_structured(
+    result = get_gemini().call_structured(
         schema=FieldCandidates,
         system=fields_v1.system(_catalogue()),
         content=[text_block(data_block("resume_text", text[:30_000]))],

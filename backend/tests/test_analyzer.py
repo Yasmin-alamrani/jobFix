@@ -16,7 +16,7 @@ Required: 5+ years Python, PostgreSQL, distributed systems, payments experience.
 Preferred: Kafka, Kubernetes, Arabic language."""
 
 
-class StubClaude:
+class StubModel:
     """Stands in for the model, returning fixed evidence."""
 
     def __init__(self):
@@ -53,8 +53,8 @@ class StubClaude:
 
 @pytest.fixture
 def stub(monkeypatch):
-    s = StubClaude()
-    monkeypatch.setattr(analyzer, "get_claude", lambda: s)
+    s = StubModel()
+    monkeypatch.setattr(analyzer, "get_gemini", lambda: s)
     return s
 
 

@@ -1,18 +1,9 @@
 import { useEffect, useState } from 'react';
-import { getFields, getProfile } from './api';
+import { getFields, getProfile, getReview } from './api';
 import { Entities } from './CvView';
-import type { FieldFit, ProfileResponse } from './types';
+import Review from './Review';
+import type { CvReview, FieldFit, ProfileResponse } from './types';
 import Versions from './Versions';
-
-const SECTION_LABELS: Record<string, string> = {
-  summary: 'Professional summary',
-  experience: 'Work experience',
-  education: 'Education',
-  skills: 'Skills',
-  certifications: 'Certifications',
-  projects: 'Projects',
-  languages: 'Languages',
-};
 
 /* The fit score is arithmetic, so the components are shown alongside it for the
    same reason the audit shows its ledger: a number nobody can take apart is a
@@ -107,87 +98,111 @@ function Fields({ fields }: { fields: FieldFit[] }) {
   );
 }
 
+function Working({ label }: { label: string }) {
+  return (
+    <div className="working">
+      <span className="sweep">
+        <i />
+      </span>
+      {label}…
+    </div>
+  );
+}
+
+function message(err: unknown, fallback: string): string {
+  return err instanceof Error ? err.message : fallback;
+}
+
 export default function Profile({ resumeId }: { resumeId: string | null }) {
   const [profile, setProfile] = useState<ProfileResponse | null>(null);
+  const [profileError, setProfileError] = useState<string | null>(null);
+  const [review, setReview] = useState<CvReview | null>(null);
+  const [reviewError, setReviewError] = useState<string | null>(null);
+  const [reviewAttempt, setReviewAttempt] = useState(0);
   const [fields, setFields] = useState<FieldFit[] | null>(null);
-  /* Seeded from the prop rather than reset inside the effect. App keys this
-     component on resumeId, so a different CV remounts it with fresh state --
-     which is both simpler than clearing four values by hand and avoids the
-     extra render that a synchronous setState in an effect causes. */
-  const [working, setWorking] = useState<string | null>(
-    resumeId ? 'Reading the CV into sections' : null,
-  );
-  const [error, setError] = useState<string | null>(null);
+  const [fieldsError, setFieldsError] = useState<string | null>(null);
 
-  /* Both calls are cached server-side after the first run, so re-opening this
-     tab costs nothing. They are kept separate because field matching is the
-     more expensive of the two and is not always wanted. */
+  /* The profile comes first: the review's content checks are counted from it.
+     App keys this component on resumeId, so a different CV remounts it with
+     fresh state rather than clearing each value by hand. */
   useEffect(() => {
     if (!resumeId) return;
     let cancelled = false;
-
     getProfile(resumeId)
-      .then((res) => {
-        if (cancelled) return;
-        setProfile(res);
-        setWorking('Matching against fields');
-        return getFields(resumeId);
-      })
-      .then((res) => {
-        if (cancelled || !res) return;
-        setFields(res.fields);
-      })
-      .catch((err: unknown) => {
-        if (cancelled) return;
-        setError(err instanceof Error ? err.message : 'Could not read that CV.');
-      })
-      .finally(() => {
-        if (!cancelled) setWorking(null);
-      });
-
+      .then((res) => !cancelled && setProfile(res))
+      .catch((err: unknown) => !cancelled && setProfileError(message(err, 'Could not read that CV.')));
     return () => {
       cancelled = true;
     };
   }, [resumeId]);
 
+  /* Review and field matching are independent, so they run side by side, and
+     one failing -- the model is busy, say -- leaves the other on screen. Both
+     are cached server-side, so re-opening this tab costs nothing. */
+  useEffect(() => {
+    if (!resumeId || !profile) return;
+    let cancelled = false;
+    getReview(resumeId)
+      .then((res) => !cancelled && setReview(res.review))
+      .catch((err: unknown) => !cancelled && setReviewError(message(err, 'The review failed.')));
+    return () => {
+      cancelled = true;
+    };
+  }, [resumeId, profile, reviewAttempt]);
+
+  useEffect(() => {
+    if (!resumeId || !profile) return;
+    let cancelled = false;
+    getFields(resumeId)
+      .then((res) => !cancelled && setFields(res.fields))
+      .catch((err: unknown) => !cancelled && setFieldsError(message(err, 'Field matching failed.')));
+    return () => {
+      cancelled = true;
+    };
+  }, [resumeId, profile]);
+
   if (!resumeId) {
-    return <p className="note">Upload or paste a CV to see it broken into sections.</p>;
+    return <p className="note">Upload or paste a CV to see what to improve.</p>;
   }
+
+  const reviewing = profile && !review && !reviewError;
+  const matching = profile && !fields && !fieldsError;
 
   return (
     <div className="profile">
-      {working && (
-        <div className="working">
-          <span className="sweep">
-            <i />
-          </span>
-          {working}…
-        </div>
-      )}
-
-      {error && <p className="error">{error}</p>}
-
-      {profile && profile.sections_missing.length > 0 && (
-        <div className="verdict">
-          <strong>Missing sections.</strong> This CV has no{' '}
-          {profile.sections_missing
-            .map((s) => (SECTION_LABELS[s] ?? s).toLowerCase())
-            .join(', ')}
-          . Recruiters and parsers both look for these by name.
-        </div>
-      )}
+      {!profile && !profileError && <Working label="Reading your CV" />}
+      {profileError && <p className="error">{profileError}</p>}
 
       {profile && (
         <>
-          <h3>What the CV says</h3>
-          <Entities profile={profile.profile} />
-        </>
-      )}
+          <h3>CV review</h3>
+          {reviewing && <Working label="Reviewing your CV for weak areas — this can take a minute" />}
+          {reviewError && (
+            <div>
+              <p className="error">{reviewError}</p>
+              <button
+                type="button"
+                className="retry"
+                onClick={() => {
+                  setReviewError(null);
+                  setReviewAttempt((n) => n + 1);
+                }}
+              >
+                Try the review again
+              </button>
+            </div>
+          )}
+          {review && <Review review={review} />}
 
-      {fields && (
-        <>
           <h3>Fields this CV fits</h3>
-          <Fields fields={fields} />
+          {matching && <Working label="Matching against fields" />}
+          {fieldsError && <p className="error">{fieldsError}</p>}
+          {fields && <Fields fields={fields} />}
+
+          <details className="read-back">
+            <summary>What we read from your CV</summary>
+            <Entities profile={profile.profile} />
+          </details>
         </>
       )}
 

@@ -19,7 +19,7 @@ from app.agents.analyst.parser import parse_pdf
 from app.agents.scout import brief as brief_mod
 from app.agents.scout import filters as job_filters
 from app.agents.scout.intake import IntakeError, describe_failure, fetch_one
-from app.agents.scout.llm import OpenRouter, OpenRouterError
+from app.agents.scout.llm import ScoutModel, ScoutModelError, available_model
 from app.agents.scout.policy import PolicyViolation, WallEncountered
 from app.core.safe_fetch import BlockedAddress
 from app.agents.scout.matcher import match_all
@@ -28,7 +28,7 @@ from app.agents.scout.runner import ScoutRequest, collect
 from app.core.config import get_settings
 from app.core.ratelimit import fetch_limit, scoring_limit
 from app.models.db import get_db
-from app.models.entities import Resume
+from app.models.entities import Resume, StoredProfile
 from pathlib import Path
 
 log = logging.getLogger(__name__)
@@ -79,6 +79,9 @@ class FindResponse(BaseModel):
     candidates: list[CandidateOut]
     # reason -> how many postings the filters hid for it.
     hidden: dict[str, int] = Field(default_factory=dict)
+    # What the user should know about the sources: Google not searched and
+    # why, or what it was searched for.
+    notes: list[str] = Field(default_factory=list)
 
 
 class ScoreRequest(BaseModel):
@@ -135,11 +138,36 @@ def _resume_text(db: Session, resume_id: str) -> str:
     return report.text
 
 
+def _latest_title(db: Session, resume_id: str) -> str:
+    """The CV's most recent job title, from its stored profile if it has one.
+
+    What Google for Jobs is searched for when the user types no role -- a better
+    guess than a fixed "software engineer" for a CV that is not one. Read from
+    the cache only, so a search never waits on a model call for it.
+    """
+    stored = db.query(StoredProfile).filter_by(resume_id=resume_id).one_or_none()
+    if stored is None:
+        return ""
+    roles = (stored.profile or {}).get("experience") or []
+    return next((str(r.get("title") or "").strip() for r in roles
+                 if str(r.get("title") or "").strip()), "")
+
+
 @router.post("/find", response_model=FindResponse, dependencies=[Depends(fetch_limit)])
 def find(request: FindRequest, db: Session = Depends(get_db)) -> FindResponse:
     """Scan sources and rank against the CV. Free -- no model call."""
     settings = get_settings()
     resume_text = _resume_text(db, request.resume_id)
+
+    notes: list[str] = []
+    google_query = request.jsearch_query or request.title_hint
+    if request.include_jsearch and not google_query:
+        google_query = _latest_title(db, request.resume_id)
+        if google_query and settings.jsearch_api_key:
+            notes.append(
+                f"Google for Jobs was searched for “{google_query}”, the most recent "
+                "title on your CV. Type a role to search for something else."
+            )
 
     scout_request = ScoutRequest(
         resume_text=resume_text,
@@ -148,10 +176,10 @@ def find(request: FindRequest, db: Session = Depends(get_db)) -> FindResponse:
         industries=set(request.industries) or None,
         include_jsearch=request.include_jsearch,
         linkedin_only=request.linkedin_only,
-        jsearch_query=request.jsearch_query,
+        jsearch_query=google_query,
     )
 
-    jobs = collect(scout_request, jsearch_key=settings.jsearch_api_key)
+    jobs = collect(scout_request, jsearch_key=settings.jsearch_api_key, notes=notes)
     filtered = job_filters.apply(jobs, job_filters.Filters(
         work_mode=request.work_mode,
         seniority=frozenset(request.seniority),
@@ -174,6 +202,7 @@ def find(request: FindRequest, db: Session = Depends(get_db)) -> FindResponse:
         total_found=len(jobs),
         by_source=by_source,
         hidden=dict(filtered.hidden),
+        notes=notes,
         candidates=[
             CandidateOut(
                 id=c.job.dedupe_key, title=c.job.title, company=c.job.company,
@@ -192,12 +221,11 @@ def find(request: FindRequest, db: Session = Depends(get_db)) -> FindResponse:
 @router.post("/score", response_model=ScoreResponse, dependencies=[Depends(scoring_limit)])
 def score(request: ScoreRequest, db: Session = Depends(get_db)) -> ScoreResponse:
     """Score the chosen shortlist with the model. This is the part that costs."""
-    settings = get_settings()
-    if not settings.openrouter_api_key:
+    model = ScoutModel()
+    if not model.has_credentials:
         raise HTTPException(
             503,
-            "No OpenRouter key. Add OPENROUTER_API_KEY to backend/.env and "
-            "restart the server.",
+            "No Gemini API key. Add GEMINI_API_KEY to backend/.env and restart the server.",
         )
     if not request.job_ids:
         raise HTTPException(422, "Pick at least one job to score.")
@@ -213,13 +241,12 @@ def score(request: ScoreRequest, db: Session = Depends(get_db)) -> ScoreResponse
     resume_text = _resume_text(db, request.resume_id)
 
     try:
-        client = OpenRouter(settings.openrouter_api_key, model=settings.scout_model)
-        matches = match_all(client, resume_text, chosen, limit=MAX_SHORTLIST)
+        matches = match_all(model, resume_text, chosen, limit=MAX_SHORTLIST)
         built = brief_mod.build(
             matches, total_found=len(cached), limit=len(chosen),
-            client=client if request.headline else None,
+            client=model if request.headline else None,
         )
-    except OpenRouterError as exc:
+    except ScoutModelError as exc:
         raise HTTPException(502, str(exc)) from exc
 
     by_key = {m.job.dedupe_key: m for m in matches}
@@ -280,11 +307,7 @@ def from_url(request: FromUrlRequest, db: Session = Depends(get_db)) -> FromUrlR
     publishes structured data; scoring costs one model call.
     """
     settings = get_settings()
-    model = (
-        OpenRouter(settings.openrouter_api_key, model=settings.scout_model)
-        if settings.openrouter_api_key
-        else None
-    )
+    model = available_model()
 
     try:
         job = fetch_one(request.url.strip(), client=model)

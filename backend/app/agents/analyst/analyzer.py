@@ -22,7 +22,7 @@ from pathlib import Path
 
 from pydantic import BaseModel
 
-from app.core.claude import get_claude, pdf_block, text_block
+from app.core.gemini import get_gemini, pdf_block, text_block
 from app.prompts import analyst_v2, data_block
 
 from . import scoring
@@ -57,7 +57,7 @@ def analyze(
 ) -> AnalysisResult:
     """Run the full analysis and return a scored, evidence-backed result."""
     report = parse_pdf(resume_path)
-    claude = get_claude()
+    model = get_gemini()
 
     if not report.has_extractable_text:
         # No text layer means the model has nothing to reason over and the ATS
@@ -69,7 +69,7 @@ def analyze(
         return _unreadable_result(report)
 
     role = f"Target role: {job_title}\n\n" if job_title else ""
-    match = claude.call_structured(
+    match = model.call_structured(
         schema=_MatchCall,
         system=analyst_v2.match_system(industry),
         content=[
@@ -82,7 +82,7 @@ def analyze(
         ],
     )
 
-    writing = claude.call_structured(
+    writing = model.call_structured(
         schema=WritingReview,
         system=analyst_v2.writing_system(
             industry,

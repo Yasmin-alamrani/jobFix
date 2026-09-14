@@ -9,7 +9,11 @@ import pytest
 from app.agents.scout import intake as intake_mod
 from app.agents.scout.browser import Page
 from app.agents.scout.intake import IntakeError, describe_failure, fetch_one
-from app.agents.scout.llm import OpenRouterError
+from google.genai import errors as genai_errors
+from google.genai import types as genai_types
+
+from app.agents.scout.llm import ScoutModelError
+from app.core.gemini import GeminiClient
 from app.agents.scout.policy import Policy, PolicyViolation, WallEncountered
 from app.agents.scout.vision import VisionClient
 
@@ -173,41 +177,51 @@ def test_failures_explain_what_to_do_instead():
 
 # --- vision fallback ---------------------------------------------------------
 
-def _vision(monkeypatch, content, status=200):
-    def handler(request):
-        if status != 200:
-            return httpx.Response(status, text="err")
-        return httpx.Response(200, json={"choices": [{"message": {"content": content}}]})
+class _Sdk:
+    """The Gemini SDK, one level down, so VisionClient's real handling runs."""
 
-    real = httpx.Client
-    monkeypatch.setattr(
-        httpx, "Client",
-        lambda *a, **kw: real(*a, **{**kw, "transport": httpx.MockTransport(handler)}),
-    )
-    return VisionClient("k")
+    def __init__(self, reply):
+        self.models = self
+        self.reply = reply
+        self.calls = []
+
+    def generate_content(self, *, model, contents, config):
+        self.calls.append({"contents": contents, "config": config})
+        if isinstance(self.reply, Exception):
+            raise self.reply
+        return genai_types.GenerateContentResponse.model_validate({"candidates": [{
+            "content": {"role": "model", "parts": [{"text": self.reply}]},
+            "finish_reason": "STOP",
+        }]})
+
+
+def _vision(reply):
+    sdk = _Sdk(reply)
+    gemini = GeminiClient(api_key="k", model="gemini-3.8-flash", thinking="high", client=sdk)
+    return VisionClient(gemini), sdk
 
 
 def _shot_page():
     return Page(url="https://x.com/j/1", title="Job", text="", screenshot=b"\x89PNG fake")
 
 
-def test_vision_extracts_from_a_screenshot(monkeypatch):
-    client = _vision(monkeypatch, '{"is_job_posting": true, "title": "Backend Engineer",'
-                                  ' "company": "Rain", "location": "Riyadh",'
-                                  ' "description": "Go.", "employment_type": "Full-time",'
-                                  ' "seniority": "Senior"}')
+def test_vision_extracts_from_a_screenshot():
+    client, _ = _vision('{"is_job_posting": true, "title": "Backend Engineer",'
+                        ' "company": "Rain", "location": "Riyadh",'
+                        ' "description": "Go.", "employment_type": "Full-time",'
+                        ' "seniority": "Senior"}')
     job = client.read_page(_shot_page())
     assert job.title == "Backend Engineer"
     assert job.source == "vision"
 
 
-def test_vision_needs_a_screenshot(monkeypatch):
-    client = _vision(monkeypatch, "{}")
+def test_vision_needs_a_screenshot():
+    client, _ = _vision("{}")
     with pytest.raises(ValueError, match="screenshot=True"):
         client.read_page(Page(url="u", title="t", text="x"))
 
 
-def test_vision_prompt_treats_the_image_as_untrusted(monkeypatch):
+def test_vision_prompt_treats_the_image_as_untrusted():
     from app.agents.scout.vision import SYSTEM
     system = " ".join(SYSTEM.lower().split())
     assert "untrusted" in system
@@ -215,45 +229,36 @@ def test_vision_prompt_treats_the_image_as_untrusted(monkeypatch):
     assert "no action available to you" in system
 
 
-def test_vision_rejects_non_job_images(monkeypatch):
-    client = _vision(monkeypatch, '{"is_job_posting": false, "title": ""}')
+def test_vision_rejects_non_job_images():
+    client, _ = _vision('{"is_job_posting": false, "title": ""}')
     assert client.read_page(_shot_page()) is None
 
 
-def test_vision_survives_unusable_output(monkeypatch):
-    client = _vision(monkeypatch, "the image shows a job")
+def test_vision_survives_unusable_output():
+    client, _ = _vision("the image shows a job")
     assert client.read_page(_shot_page()) is None
 
 
-def test_vision_http_errors_are_translated(monkeypatch):
-    client = _vision(monkeypatch, "", status=429)
-    with pytest.raises(OpenRouterError, match="429"):
+def test_vision_api_errors_are_translated():
+    client, _ = _vision(genai_errors.ClientError(429, {"error": {
+        "code": 429, "status": "RESOURCE_EXHAUSTED", "message": "Quota exceeded."}}))
+    with pytest.raises(ScoutModelError, match="rate limit or quota"):
         client.read_page(_shot_page())
 
 
 def test_vision_requires_a_key():
-    with pytest.raises(OpenRouterError):
-        VisionClient("")
+    with pytest.raises(ScoutModelError, match="GEMINI_API_KEY"):
+        VisionClient(GeminiClient(api_key="", model="gemini-3.8-flash", thinking="high"))
 
 
-def test_vision_sends_the_image_as_a_data_url(monkeypatch):
-    captured = {}
-
-    def handler(request):
-        import json
-        captured.update(json.loads(request.content))
-        return httpx.Response(200, json={"choices": [{"message": {
-            "content": '{"is_job_posting": true, "title": "X"}'}}]})
-
-    real = httpx.Client
-    monkeypatch.setattr(
-        httpx, "Client",
-        lambda *a, **kw: real(*a, **{**kw, "transport": httpx.MockTransport(handler)}),
-    )
-    VisionClient("k").read_page(_shot_page())
-    image = captured["messages"][1]["content"][0]["image_url"]["url"]
-    assert image.startswith("data:image/png;base64,")
-    assert base64.standard_b64decode(image.split(",", 1)[1]) == b"\x89PNG fake"
+def test_vision_sends_the_screenshot_as_an_inline_image_at_low_thinking():
+    client, sdk = _vision('{"is_job_posting": true, "title": "X"}')
+    client.read_page(_shot_page())
+    image = sdk.calls[0]["contents"][0].parts[0].inline_data
+    assert image.mime_type == "image/png"
+    assert image.data == b"\x89PNG fake"
+    level = sdk.calls[0]["config"].thinking_config.thinking_level
+    assert level == genai_types.ThinkingLevel.LOW
 
 
 def test_a_missing_key_is_not_blamed_on_the_url(monkeypatch):
@@ -267,7 +272,7 @@ def test_a_missing_key_is_not_blamed_on_the_url(monkeypatch):
         intake_mod, "ReadOnlyBrowser",
         FakeBrowser(Page(url="u", title="Job", text="Backend Engineer at Tamara")),
     )
-    with pytest.raises(IntakeError, match="OPENROUTER_API_KEY"):
+    with pytest.raises(IntakeError, match="GEMINI_API_KEY"):
         fetch_one(LINKEDIN_JOB, client=None)
 
 

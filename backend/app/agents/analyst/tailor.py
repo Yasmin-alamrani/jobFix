@@ -35,7 +35,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from app.core.claude import get_claude, text_block
+from app.core.gemini import get_gemini, text_block
 from app.prompts import data_block, tailor_v1
 
 from .profile import CvProfile
@@ -217,7 +217,7 @@ def _label(profile: CvProfile, t: Target, kind: str, after: str = "") -> str:
     return "Projects — order"
 
 
-def _scope(profile: CvProfile, t: Target) -> tuple[str, str]:
+def scope_for(profile: CvProfile, t: Target) -> tuple[str, str]:
     """The text an edit is checked against, and how to name it to the user.
 
     A bullet is checked against its own role, not the whole CV. A figure or tool
@@ -400,7 +400,7 @@ def _violations(profile: CvProfile, edit: Edit, t: Target, job_vocab: set[str]) 
         limit = MAX_TEXT[t.kind]
         if len(edit.after_text) > limit:
             return [f"At {len(edit.after_text)} characters it is too long for this part of a CV."]
-        scope, where = _scope(profile, t)
+        scope, where = scope_for(profile, t)
         return [f.message for f in introduced(
             edit.after_text, scope=scope, whole=profile.all_text,
             job_terms=job_vocab, where=where,
@@ -585,7 +585,7 @@ def render_for_model(profile: CvProfile) -> str:
 def propose(
     profile: CvProfile, *, job_title: str, company: str, job_description: str
 ) -> Proposal:
-    """One Claude call, then `review`. Title and company travel inside the fence:
+    """One model call, then `review`. Title and company travel inside the fence:
     they come from the same untrusted posting as the description does."""
     header = "\n".join(x for x in (
         f"Title: {job_title}" if job_title else "",
@@ -593,7 +593,7 @@ def propose(
     ) if x)
     posting = (f"{header}\n\n" if header else "") + job_description[:MAX_JD_CHARS]
 
-    call = get_claude().call_structured(
+    call = get_gemini().call_structured(
         schema=TailorCall,
         system=tailor_v1.SYSTEM,
         content=[text_block(

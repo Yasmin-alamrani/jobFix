@@ -19,7 +19,7 @@ from dataclasses import dataclass, field
 
 from pydantic import BaseModel
 
-from .llm import OpenRouter, OpenRouterError
+from .llm import ScoutModel, ScoutModelError
 from .matcher import Match
 
 log = logging.getLogger(__name__)
@@ -146,7 +146,7 @@ def build(
     total_found: int,
     by_source: dict[str, int] | None = None,
     limit: int = 8,
-    client: OpenRouter | None = None,
+    client: ScoutModel | None = None,
 ) -> Brief:
     """Assemble the brief. Costs nothing unless `client` is given for a headline."""
     scored = [m for m in matches if m.ok]
@@ -182,9 +182,9 @@ def build(
         try:
             brief.headline = client.complete_json(
                 schema=_Headline, system=HEADLINE_SYSTEM,
-                user=f"Roles found:\n{digest}", max_tokens=200,
+                user=f"Roles found:\n{digest}", effort="low",
             ).headline.strip()
-        except OpenRouterError as exc:
+        except ScoutModelError as exc:
             # A missing headline is cosmetic; the brief stands without it.
             log.info("headline unavailable: %s", exc)
 
