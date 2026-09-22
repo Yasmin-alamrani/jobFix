@@ -26,6 +26,7 @@ from enum import Enum
 from pydantic import BaseModel, Field
 
 from app.core.gemini import get_gemini, text_block
+from app.core.i18n import Lang, tr_fields, with_language
 from app.prompts import data_block, review_v1
 
 from . import scoring
@@ -274,15 +275,20 @@ def review_cv(
     *,
     profile: CvProfile,
     report: ParseReport | None = None,
+    lang: Lang = "en",
 ) -> CvReview:
-    """Checks first, then the model, told what the checks already found."""
+    """Checks first, then the model, told what the checks already found.
+
+    In Arabic the model writes its findings in Arabic and the checks are
+    translated; quotes and example rewrites stay in the CV's own language.
+    """
     checks = layout_checks(report) if report is not None else contact_checks(profile)
     checks = sorted(checks + content_checks(profile), key=lambda c: _RANK[c.severity])
 
     already = "\n".join(f"- {c.title}" for c in checks) or "- (nothing)"
     call = get_gemini().call_structured(
         schema=ReviewCall,
-        system=review_v1.SYSTEM,
+        system=with_language(review_v1.SYSTEM, lang),
         content=[text_block(
             data_block("resume_text", resume_text[:MAX_CHARS])
             + "\n\nAlready reported by automatic checks -- do not repeat these:\n"
@@ -290,8 +296,13 @@ def review_cv(
             + "\n\nReview this CV."
         )],
     )
-    return verify(call, resume_text, profile=profile, checks=checks,
-                  layout_checked=report is not None)
+    review = verify(call, resume_text, profile=profile, checks=checks,
+                    layout_checked=report is not None)
+    if lang == "ar":
+        review = review.model_copy(update={"checks": [
+            tr_fields(c, lang, "title", "evidence", "fix") for c in review.checks
+        ]})
+    return review
 
 
 def scope_of(quote: str, profile: CvProfile, resume_text: str) -> str:

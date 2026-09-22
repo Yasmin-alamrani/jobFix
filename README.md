@@ -3,9 +3,13 @@
 Two agents for a Saudi job search:
 
 1. **Resume analyst** — reviews a CV on its own (weak areas, why each one hurts, and what to change, with every quote checked against the CV), and scores it against one job posting out of 100, showing exactly which points it lost and why.
-2. **Job scout** — finds roles across ATS boards and Google for Jobs, ranks them against your CV with the *same* scorer, and writes a short brief. It cannot apply to anything.
+2. **Job scout** — finds roles across ATS boards and Google for Jobs, ranks them against your CV with the *same* scorer, and opens any of them in the match view. It cannot apply to anything.
+
+Pasting a job link reads the posting cheapest-way-first: structured data, then the page's own text, then a rendered copy, and only then the model. A site that forbids automated reading (LinkedIn) is never fetched — the posting is looked up through Google for Jobs, which is where it is syndicated on purpose.
 
 Both are built. An earlier plan had Agent 2 emailing companies from a contact dataset; that was dropped in favour of discovery, and its artifacts removed.
+
+The whole app works in **English or Arabic**, with a switch in the top bar; it opens in the browser's language until you choose. In Arabic the page reads right to left, the model writes its reviews and advice in Arabic, and the app's own messages are translated from one catalogue (`backend/app/core/i18n_ar.py`). Quotes from your CV and the posting are never translated — they stay as written, so the checks that they really are quotes still hold.
 
 ## What makes the score trustworthy
 
@@ -49,7 +53,8 @@ cp backend/.env.example backend/.env
 | `JSEARCH_API_KEY` | *Optional.* Google for Jobs, which is how LinkedIn roles reach the scan | [openwebninja.com/api/jsearch](https://www.openwebninja.com/api/jsearch) — free tier is 200 requests/month |
 
 Without the JSearch key the scout still runs; it just searches the free ATS
-boards only, and the "Also search Google for Jobs" checkbox does nothing.
+boards -- a handful of companies -- and says so under the results. The same key
+is what lets a link to a site we may not fetch be looked up instead.
 
 **CVs are personal data.** On the Gemini API's free tier, Google may use what
 you send to improve its products and human reviewers may read it; its terms say

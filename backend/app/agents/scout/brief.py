@@ -19,6 +19,8 @@ from dataclasses import dataclass, field
 
 from pydantic import BaseModel
 
+from app.core.i18n import Lang, with_language
+
 from .llm import ScoutModel, ScoutModelError
 from .matcher import Match
 
@@ -147,6 +149,7 @@ def build(
     by_source: dict[str, int] | None = None,
     limit: int = 8,
     client: ScoutModel | None = None,
+    lang: Lang = "en",
 ) -> Brief:
     """Assemble the brief. Costs nothing unless `client` is given for a headline."""
     scored = [m for m in matches if m.ok]
@@ -181,7 +184,7 @@ def build(
         )
         try:
             brief.headline = client.complete_json(
-                schema=_Headline, system=HEADLINE_SYSTEM,
+                schema=_Headline, system=with_language(HEADLINE_SYSTEM, lang),
                 user=f"Roles found:\n{digest}", effort="low",
             ).headline.strip()
         except ScoutModelError as exc:

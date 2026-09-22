@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import { useText } from './i18n';
 
 // The server's limits, checked here too so a wrong file fails instantly
 // instead of after a 15 MB upload.
@@ -7,12 +8,94 @@ const ACCEPT =
 const MAX_BYTES = 15 * 1024 * 1024;
 const MIN_PASTE = 100;
 
-function problemWith(file: File): string | null {
+const en = {
+  badType: 'Upload a PDF or a Word (.docx) file.',
+  tooBig: 'That file is over 15 MB. Export a smaller PDF and try again.',
+  kicker: 'Resume Analyzer',
+  heading: 'Will your CV get past the first screen?',
+  lede:
+    'Upload your CV to see how an applicant tracking system reads it, how well it fits the ' +
+    'jobs you want, and exactly what to change — without inventing a single line.',
+  pasteLabel: 'Paste your CV',
+  pastePlaceholder: 'Paste the whole CV, including dates and bullet points.',
+  analyzeText: 'Analyze this text',
+  uploadInstead: 'Upload a file instead',
+  tooShort: 'That is too short to be a whole CV.',
+  dropLead: 'Drop your CV here or choose a file.',
+  dropHint: 'PDF or Word (.docx), up to 15 MB.',
+  upload: 'Upload your CV',
+  pasteInstead: 'or paste the text instead',
+  privacy:
+    'Your CV is stored on this computer and sent to the AI model only when you run an ' +
+    'analysis. You can delete it, and everything made from it, at any time.',
+  unlocksTitle: 'What opens up once your CV is in',
+  unlocks: [
+    {
+      title: 'Read your CV',
+      text: 'Your weak areas and how to fix each one, what is missing, and the fields you fit best — each score broken down so you can check it.',
+    },
+    {
+      title: 'Match against a job',
+      text: 'Paste a posting or its link. See each requirement met, partly met or missing, with the line from your CV that proves it.',
+    },
+    {
+      title: 'Find matching jobs',
+      text: 'Search company job boards and Google for Jobs, filter by level, work arrangement and date, and rank what you find against your CV.',
+    },
+    {
+      title: 'Tailor and export',
+      text: 'Accept or reject each suggested edit — none of them can add anything your CV does not say — then download a clean PDF or Word file.',
+    },
+  ],
+};
+
+const ar: typeof en = {
+  badType: 'ارفع ملف PDF أو Word ‏(.docx).',
+  tooBig: 'حجم هذا الملف يتجاوز 15 ميغابايت. صدّر ملف PDF أصغر وحاول مجددًا.',
+  kicker: 'محلل السيرة الذاتية',
+  heading: 'هل تجتاز سيرتك الذاتية الفرز الأول؟',
+  lede:
+    'ارفع سيرتك الذاتية لترى كيف يقرؤها نظام تتبّع المتقدمين، ومدى ملاءمتها للوظائف التي ' +
+    'تريدها، وما الذي يجب تغييره بالضبط — دون اختلاق سطر واحد.',
+  pasteLabel: 'الصق سيرتك الذاتية',
+  pastePlaceholder: 'الصق السيرة الذاتية كاملة، بما فيها التواريخ والنقاط.',
+  analyzeText: 'حلّل هذا النص',
+  uploadInstead: 'ارفع ملفًا بدلًا من ذلك',
+  tooShort: 'هذا أقصر من أن يكون سيرة ذاتية كاملة.',
+  dropLead: 'أفلت سيرتك الذاتية هنا أو اختر ملفًا.',
+  dropHint: 'PDF أو Word ‏(.docx)، حتى 15 ميغابايت.',
+  upload: 'ارفع سيرتك الذاتية',
+  pasteInstead: 'أو الصق النص بدلًا من ذلك',
+  privacy:
+    'تُحفظ سيرتك الذاتية على هذا الجهاز ولا تُرسل إلى نموذج الذكاء الاصطناعي إلا عند تشغيل ' +
+    'التحليل. يمكنك حذفها، وكل ما نتج عنها، في أي وقت.',
+  unlocksTitle: 'ما يتاح لك بعد رفع سيرتك الذاتية',
+  unlocks: [
+    {
+      title: 'اقرأ سيرتك الذاتية',
+      text: 'نقاط الضعف وكيفية إصلاح كل منها، وما ينقصها، والمجالات الأنسب لك — مع تفصيل كل درجة لتتحقق منها.',
+    },
+    {
+      title: 'طابقها مع وظيفة',
+      text: 'الصق إعلانًا أو رابطه. شاهد كل متطلب: مستوفى أو مستوفى جزئيًا أو مفقود، مع السطر من سيرتك الذاتية الذي يثبته.',
+    },
+    {
+      title: 'ابحث عن وظائف مناسبة',
+      text: 'ابحث في لوحات وظائف الشركات وGoogle للوظائف، وصفِّ النتائج حسب المستوى ونمط العمل والتاريخ، ورتّبها وفق سيرتك الذاتية.',
+    },
+    {
+      title: 'خصّص وصدّر',
+      text: 'اقبل كل تعديل مقترح أو ارفضه — ولا يمكن لأي منها أن يضيف شيئًا لا تقوله سيرتك الذاتية — ثم نزّل ملف PDF أو Word نظيفًا.',
+    },
+  ],
+};
+
+const TEXT = { en, ar };
+
+function problemWith(file: File, t: typeof en): string | null {
   const name = file.name.toLowerCase();
-  if (!name.endsWith('.pdf') && !name.endsWith('.docx')) {
-    return 'Upload a PDF or a Word (.docx) file.';
-  }
-  if (file.size > MAX_BYTES) return 'That file is over 15 MB. Export a smaller PDF and try again.';
+  if (!name.endsWith('.pdf') && !name.endsWith('.docx')) return t.badType;
+  if (file.size > MAX_BYTES) return t.tooBig;
   return null;
 }
 
@@ -43,25 +126,6 @@ function Lock() {
   );
 }
 
-const UNLOCKS = [
-  {
-    title: 'Read your CV',
-    text: 'Every section pulled out, what is missing flagged, and the fields you fit best — each score broken down so you can check it.',
-  },
-  {
-    title: 'Match against a job',
-    text: 'Paste a posting or its link. See each requirement met, partly met or missing, with the line from your CV that proves it.',
-  },
-  {
-    title: 'Find matching jobs',
-    text: 'Search company job boards and Google for Jobs, filter by level, work arrangement and date, and rank what you find against your CV.',
-  },
-  {
-    title: 'Tailor and export',
-    text: 'Accept or reject each suggested edit — none of them can add anything your CV does not say — then download a clean PDF or Word file.',
-  },
-];
-
 export default function Landing({
   working,
   error,
@@ -73,6 +137,7 @@ export default function Landing({
   onFile: (file: File) => void;
   onPaste: (text: string) => void;
 }) {
+  const t = useText(TEXT);
   const input = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
   const [pasting, setPasting] = useState(false);
@@ -81,7 +146,7 @@ export default function Landing({
 
   function choose(file: File | undefined) {
     if (!file) return;
-    const issue = problemWith(file);
+    const issue = problemWith(file, t);
     setProblem(issue);
     if (!issue) onFile(file);
   }
@@ -94,12 +159,9 @@ export default function Landing({
       <div className="landing-inner">
         <section className="hero">
           <div className="hero-copy">
-            <p className="kicker">Resume Analyzer</p>
-            <h1>Will your CV get past the first screen?</h1>
-            <p className="lede">
-              Upload your CV to see how an applicant tracking system reads it, how well it fits
-              the jobs you want, and exactly what to change — without inventing a single line.
-            </p>
+            <p className="kicker">{t.kicker}</p>
+            <h1>{t.heading}</h1>
+            <p className="lede">{t.lede}</p>
 
             <div
               className={`dropzone${dragging ? ' over' : ''}`}
@@ -119,10 +181,11 @@ export default function Landing({
               {pasting ? (
                 <>
                   <label>
-                    <span className="label-text">Paste your CV</span>
+                    <span className="label-text">{t.pasteLabel}</span>
                     <textarea
+                      dir="auto"
                       value={text}
-                      placeholder="Paste the whole CV, including dates and bullet points."
+                      placeholder={t.pastePlaceholder}
                       onChange={(e) => setText(e.target.value)}
                       autoFocus
                     />
@@ -134,21 +197,21 @@ export default function Landing({
                       disabled={busy || text.trim().length < MIN_PASTE}
                       onClick={() => onPaste(text)}
                     >
-                      Analyze this text
+                      {t.analyzeText}
                     </button>
                     <button type="button" className="linklike" onClick={() => setPasting(false)}>
-                      Upload a file instead
+                      {t.uploadInstead}
                     </button>
                   </div>
                   {text.trim().length > 0 && text.trim().length < MIN_PASTE && (
-                    <p className="dropzone-hint">That is too short to be a whole CV.</p>
+                    <p className="dropzone-hint">{t.tooShort}</p>
                   )}
                 </>
               ) : (
                 <>
                   <p className="dropzone-lead">
-                    Drop your CV here or choose a file.
-                    <small>PDF or Word (.docx), up to 15 MB.</small>
+                    {t.dropLead}
+                    <small>{t.dropHint}</small>
                   </p>
                   <input
                     ref={input}
@@ -167,7 +230,7 @@ export default function Landing({
                     disabled={busy}
                     onClick={() => input.current?.click()}
                   >
-                    Upload your CV
+                    {t.upload}
                   </button>
                   <button
                     type="button"
@@ -178,7 +241,7 @@ export default function Landing({
                       setPasting(true);
                     }}
                   >
-                    or paste the text instead
+                    {t.pasteInstead}
                   </button>
                 </>
               )}
@@ -195,19 +258,16 @@ export default function Landing({
 
               <p className="privacy">
                 <Lock />
-                <span>
-                  Your CV is stored on this computer and sent to the AI model only when you run an
-                  analysis. You can delete it, and everything made from it, at any time.
-                </span>
+                <span>{t.privacy}</span>
               </p>
             </div>
           </div>
         </section>
 
         <section className="unlocks">
-          <div className="eyebrow">What opens up once your CV is in</div>
+          <div className="eyebrow">{t.unlocksTitle}</div>
           <div className="unlock-grid">
-            {UNLOCKS.map((u, i) => (
+            {t.unlocks.map((u, i) => (
               <article className="unlock" key={u.title}>
                 <span className="step">0{i + 1}</span>
                 <h3>{u.title}</h3>

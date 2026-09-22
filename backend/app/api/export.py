@@ -24,6 +24,7 @@ from app.export.docx import render_docx
 from app.export.pdf import ExportUnavailable, render_pdf
 from app.export.placeholders import PlaceholderError, fill, slots
 from app.models.db import get_db
+from app.core.i18n import Lang, tr, ui_lang
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["export"])
@@ -49,14 +50,20 @@ class FillRequest(BaseModel):
 
 
 @router.get("/versions/{version_id}/placeholders", response_model=list[SlotOut])
-def list_placeholders(version_id: str, db: Session = Depends(get_db)) -> list[SlotOut]:
+def list_placeholders(
+    version_id: str, db: Session = Depends(get_db), lang: Lang = Depends(ui_lang)
+) -> list[SlotOut]:
     row = _owned_version(db, version_id)
-    return [SlotOut(**slot.__dict__) for slot in slots(CvProfile.model_validate(row.profile))]
+    return [
+        SlotOut(**{**slot.__dict__, "label": tr(slot.label, lang)})
+        for slot in slots(CvProfile.model_validate(row.profile))
+    ]
 
 
 @router.post("/versions/{version_id}/placeholders", response_model=VersionOut)
 def fill_placeholders(
-    version_id: str, request: FillRequest, db: Session = Depends(get_db)
+    version_id: str, request: FillRequest, db: Session = Depends(get_db),
+    lang: Lang = Depends(ui_lang),
 ) -> VersionOut:
     """Fill slots with the user's own figures, or drop them.
 
@@ -79,7 +86,7 @@ def fill_placeholders(
     # the original, or the user typed it here.
     row.user_supplied = [*(row.user_supplied or []), *supplied]
     db.commit()
-    return _version_out(row)
+    return _version_out(row, lang)
 
 
 def _filename(name: str, title: str, extension: str) -> tuple[str, str]:

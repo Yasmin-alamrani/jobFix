@@ -1,9 +1,6 @@
 """Paste-a-URL intake and the vision fallback."""
 from __future__ import annotations
 
-import base64
-
-import httpx
 import pytest
 
 from app.agents.scout import intake as intake_mod

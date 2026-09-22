@@ -23,6 +23,7 @@ from pathlib import Path
 from pydantic import BaseModel
 
 from app.core.gemini import get_gemini, pdf_block, text_block
+from app.core.i18n import Lang, tr, tr_fields, with_language
 from app.prompts import analyst_v2, data_block
 
 from . import scoring
@@ -54,6 +55,7 @@ def analyze(
     job_description: str,
     industry: str = "other",
     job_title: str = "",
+    lang: Lang = "en",
 ) -> AnalysisResult:
     """Run the full analysis and return a scored, evidence-backed result."""
     report = parse_pdf(resume_path)
@@ -66,12 +68,12 @@ def analyze(
         # failed to test. Awarding full keyword marks here (nothing to match =
         # matched everything) would report a comfortable number for a resume
         # that reaches recruiters blank.
-        return _unreadable_result(report)
+        return _localized(_unreadable_result(report), lang)
 
     role = f"Target role: {job_title}\n\n" if job_title else ""
     match = model.call_structured(
         schema=_MatchCall,
-        system=analyst_v2.match_system(industry),
+        system=with_language(analyst_v2.match_system(industry), lang),
         content=[
             text_block(
                 role
@@ -84,10 +86,10 @@ def analyze(
 
     writing = model.call_structured(
         schema=WritingReview,
-        system=analyst_v2.writing_system(
+        system=with_language(analyst_v2.writing_system(
             industry,
             bilingual=report.is_bilingual or report.primary_language == "ar",
-        ),
+        ), lang),
         content=[
             pdf_block(resume_path),
             text_block(
@@ -104,7 +106,7 @@ def analyze(
         scoring.score_formatting(report, writing),
     ]
 
-    return AnalysisResult(
+    result = AnalysisResult(
         overall_score=scoring.overall(subs),
         sub_scores=subs,
         requirements=match.requirements,
@@ -114,6 +116,30 @@ def analyze(
         parse_facts=_facts(report),
         prompt_version=analyst_v2.VERSION,
     )
+    return _localized(result, lang)
+
+
+def _localized(result: AnalysisResult, lang: Lang) -> AnalysisResult:
+    """The deductions' wording in the page's language.
+
+    Scored first, translated after: the arithmetic never sees a translation,
+    and a quote inside a deduction's evidence is left as the CV wrote it.
+    """
+    if lang != "ar":
+        return result
+
+    def deduction(d):
+        return tr_fields(d, lang, "title", "evidence", "fix")
+
+    return result.model_copy(update={
+        "sub_scores": [
+            s.model_copy(update={"label": tr(s.label, lang),
+                                 "deductions": [deduction(d) for d in s.deductions]})
+            for s in result.sub_scores
+        ],
+        "top_fixes": [deduction(d) for d in result.top_fixes],
+        "writing": tr_fields(result.writing, lang, "summary_verdict"),
+    })
 
 
 def _facts(report: ParseReport) -> dict:

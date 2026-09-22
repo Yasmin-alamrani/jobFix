@@ -24,7 +24,6 @@ from app.export.pdf import ExportUnavailable, is_bundled_font, render_pdf, to_ht
 from app.export.placeholders import PlaceholderError, clean_value, fill, slots
 from tailor_fixtures import (  # noqa: F401 -- tailor_client is a fixture
     ARABIC,
-    LEGIT,
     ORIGINAL,
     propose,
     tailor_client,

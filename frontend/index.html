@@ -7,13 +7,26 @@
     <title>Resume Analyzer</title>
     <meta name="description" content="Analyze your CV, match it to jobs, tailor it without inventing anything, and export it for applicant tracking systems." />
     <script>
-      // Apply a stored theme before the first paint, so there is no flash of
-      // the other one. Without a stored choice the stylesheet follows the system.
+      // Apply the stored theme and language before the first paint, so the
+      // page never flashes the other theme or flips direction after loading.
+      // Without a stored choice the stylesheet follows the system theme, and
+      // the language follows the browser's first language.
       (function () {
+        var root = document.documentElement;
         try {
           var t = localStorage.getItem('resume-analyzer-theme');
-          if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t;
+          if (t === 'light' || t === 'dark') root.dataset.theme = t;
         } catch (e) {}
+        var l = null;
+        try {
+          l = localStorage.getItem('resume-analyzer-lang');
+        } catch (e) {}
+        if (l !== 'en' && l !== 'ar') {
+          var first = (navigator.languages && navigator.languages[0]) || navigator.language || '';
+          l = first.toLowerCase().indexOf('ar') === 0 ? 'ar' : 'en';
+        }
+        root.lang = l;
+        root.dir = l === 'ar' ? 'rtl' : 'ltr';
       })();
     </script>
   </head>

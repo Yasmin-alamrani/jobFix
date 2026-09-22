@@ -1,9 +1,7 @@
 """Stage-1 prefilter. Pure arithmetic -- no network, no model, no key."""
 from __future__ import annotations
 
-import pytest
-
-from app.agents.scout.prefilter import Candidate, rank, tokenize
+from app.agents.scout.prefilter import rank, tokenize
 from app.sources.base import JobPosting
 
 BACKEND_CV = """

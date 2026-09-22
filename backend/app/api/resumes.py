@@ -20,6 +20,7 @@ from app.agents.analyst.parser import parse_pdf
 from app.agents.analyst.profile import CvProfile, ProfileError, extract_profile
 from app.agents.analyst.review import review_cv
 from app.core.gemini import FAILURES, explain
+from app.core.i18n import Lang, tr, ui_lang
 from app.core.config import get_settings
 from app.core.ratelimit import analysis_limit, upload_limit
 from app.models.db import get_db
@@ -73,8 +74,8 @@ class AnalysisOut(BaseModel):
 
 
 @router.get("/industries")
-def list_industries() -> list[dict]:
-    return [{"key": p.key, "label": p.label} for p in PACKS.values()]
+def list_industries(lang: Lang = Depends(ui_lang)) -> list[dict]:
+    return [{"key": p.key, "label": tr(p.label, lang)} for p in PACKS.values()]
 
 
 @router.post("/resumes", response_model=ResumeOut, dependencies=[Depends(upload_limit)])
@@ -116,6 +117,7 @@ def create_analysis(
     industry: str = Form("other"),
     job_title: str = Form(""),
     db: Session = Depends(get_db),
+    lang: Lang = Depends(ui_lang),
 ) -> AnalysisOut:
     settings = get_settings()
     resume = db.get(Resume, resume_id)
@@ -132,6 +134,7 @@ def create_analysis(
             job_description=job_description,
             industry=industry,
             job_title=job_title,
+            lang=lang,
         )
 
     row = Analysis(
@@ -303,20 +306,27 @@ def get_profile(resume_id: str, db: Session = Depends(get_db)) -> ProfileOut:
 
 @router.get("/resumes/{resume_id}/fields", response_model=FieldsOut,
             dependencies=[Depends(analysis_limit)])
-def get_fields(resume_id: str, db: Session = Depends(get_db)) -> FieldsOut:
-    """Fields this CV fits, best first. Cached alongside the profile."""
+def get_fields(
+    resume_id: str, db: Session = Depends(get_db), lang: Lang = Depends(ui_lang)
+) -> FieldsOut:
+    """Fields this CV fits, best first. Cached alongside the profile, per
+    language -- the justifications are the model's own sentences."""
     resume = owned_resume(db, resume_id)
+    # "fields" is English, as it was before there was a choice of language.
+    key = "fields" if lang == "en" else f"fields_{lang}"
 
     stored = db.query(StoredProfile).filter_by(resume_id=resume_id).one_or_none()
-    if stored is not None and stored.fields:
-        return FieldsOut(resume_id=resume_id, fields=stored.fields.get("fields", []))
+    if stored is not None and stored.fields and key in stored.fields:
+        return FieldsOut(resume_id=resume_id, fields=stored.fields[key])
 
     with model_errors("field matching"):
-        fits = suggest_fields(text_of(resume))
+        fits = suggest_fields(text_of(resume), lang=lang)
 
     payload = [fit.model_dump(mode="json") for fit in fits]
     if stored is not None:
-        stored.fields = {"fields": payload}
+        # A new dict, not an update in place: the JSON column only notices
+        # being assigned to.
+        stored.fields = {**(stored.fields or {}), key: payload}
         db.commit()
     return FieldsOut(resume_id=resume_id, fields=payload)
 
@@ -326,18 +336,33 @@ class ReviewOut(BaseModel):
     review: dict
 
 
+def _reviews_by_lang(stored: StoredReview | None) -> dict[str, dict]:
+    """The stored reviews, keyed by language.
+
+    A review saved before there was a choice of language is the review itself
+    rather than a dict of them, and it was written in English.
+    """
+    data = (stored.review or {}) if stored is not None else {}
+    return {"en": data} if "verdict" in data else dict(data)
+
+
 @router.get("/resumes/{resume_id}/review", response_model=ReviewOut,
             dependencies=[Depends(analysis_limit)])
-def get_review(resume_id: str, db: Session = Depends(get_db)) -> ReviewOut:
-    """Weak areas and how to fix them, with no job in mind. Cached per CV.
+def get_review(
+    resume_id: str, db: Session = Depends(get_db), lang: Lang = Depends(ui_lang)
+) -> ReviewOut:
+    """Weak areas and how to fix them, with no job in mind. Cached per CV and
+    per language.
 
     A review stored under an older prompt is redone, since it would otherwise
     keep showing advice the current prompt no longer gives.
     """
     resume = owned_resume(db, resume_id)
     stored = db.query(StoredReview).filter_by(resume_id=resume_id).one_or_none()
-    if stored is not None and stored.prompt_version == review_v1.VERSION:
-        return ReviewOut(resume_id=resume_id, review=stored.review)
+    current = stored is not None and stored.prompt_version == review_v1.VERSION
+    by_lang = _reviews_by_lang(stored) if current else {}
+    if lang in by_lang:
+        return ReviewOut(resume_id=resume_id, review=by_lang[lang])
 
     text = text_of(resume)
     profile = CvProfile.model_validate(ensure_profile(db, resume).profile)
@@ -345,21 +370,23 @@ def get_review(resume_id: str, db: Session = Depends(get_db)) -> ReviewOut:
     report = None if resume.source_text.strip() else parse_pdf(Path(resume.stored_path))
 
     with model_errors("CV review"):
-        review = review_cv(text, profile=profile, report=report)
+        review = review_cv(text, profile=profile, report=report, lang=lang)
 
     payload = review.model_dump(mode="json")
     if stored is None:
         db.add(StoredReview(user_id=resume.user_id, resume_id=resume.id,
-                            review=payload, prompt_version=review_v1.VERSION))
+                            review={lang: payload}, prompt_version=review_v1.VERSION))
     else:
-        stored.review, stored.prompt_version = payload, review_v1.VERSION
+        stored.review = {**by_lang, lang: payload}
+        stored.prompt_version = review_v1.VERSION
     try:
         db.commit()
     except IntegrityError:
         # Another request reviewed the same CV first -- a second tab, or
         # React's development mode mounting twice. Its review is as good.
         db.rollback()
-        payload = db.query(StoredReview).filter_by(resume_id=resume_id).one().review
+        again = db.query(StoredReview).filter_by(resume_id=resume_id).one()
+        payload = _reviews_by_lang(again).get(lang, payload)
     return ReviewOut(resume_id=resume_id, review=payload)
 
 

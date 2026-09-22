@@ -22,6 +22,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 from app.core.gemini import get_gemini, text_block
+from app.core.i18n import Lang, tr, with_language
 from app.prompts import data_block, targeting_v1
 
 from .provenance import normalise, quoted_in
@@ -102,7 +103,8 @@ def verify(result: Targeting, posting: str) -> Targeting:
 
 
 def target(
-    *, job_description: str, title: str = "", company: str = "", resume_text: str = ""
+    *, job_description: str, title: str = "", company: str = "", resume_text: str = "",
+    lang: Lang = "en",
 ) -> Targeting:
     """One model call, then `verify`. Title and company go inside the fence,
     because they come from the same untrusted posting as the description."""
@@ -117,7 +119,8 @@ def target(
 
     result = get_gemini().call_structured(
         schema=Targeting,
-        system=targeting_v1.SYSTEM,
+        system=with_language(targeting_v1.SYSTEM, lang),
         content=[text_block(content + "\n\nAnalyse how to target this employer.")],
     )
-    return verify(result, posting)
+    checked = verify(result, posting)
+    return checked.model_copy(update={"caveat": tr(checked.caveat, lang)})

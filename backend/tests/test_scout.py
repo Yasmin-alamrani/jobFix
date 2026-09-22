@@ -417,3 +417,17 @@ def test_run_produces_a_brief_end_to_end(monkeypatch):
     assert "roles found" in result.brief.render()
     # Best first.
     assert result.matches[0].score > result.matches[1].score
+
+
+def test_one_employers_near_identical_titles_collapse(monkeypatch):
+    """Aggregators repeat a role under slightly different titles and places."""
+    monkeypatch.setattr(runner_mod, "scan_ats", lambda **kw: [
+        _job("Senior Java Backend Engineer | Microservices", company="InnovationTeam"),
+        _job("Senior JAVA Backend Engineer | Microservices & Growth", company="InnovationTeam"),
+        _job("Senior Java Backend Engineer | Microservices", company="Rain"),
+    ])
+    jobs = runner_mod.collect(ScoutRequest(resume_text=CV))
+    assert [(j.company, j.title[:20]) for j in jobs] == [
+        ("InnovationTeam", "Senior Java Backend "),
+        ("Rain", "Senior Java Backend "),
+    ]

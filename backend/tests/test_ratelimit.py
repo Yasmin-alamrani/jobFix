@@ -9,7 +9,7 @@ import pytest
 from fastapi import Depends, FastAPI
 from fastapi.testclient import TestClient
 
-from app.core.ratelimit import ALL_LIMITS, TokenBucket, rate_limit, reset_all
+from app.core.ratelimit import ALL_LIMITS, TokenBucket, rate_limit
 from app.main import app
 
 

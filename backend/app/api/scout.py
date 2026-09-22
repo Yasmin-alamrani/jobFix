@@ -26,6 +26,7 @@ from app.agents.scout.matcher import match_all
 from app.agents.scout.prefilter import rank
 from app.agents.scout.runner import ScoutRequest, collect
 from app.core.config import get_settings
+from app.core.i18n import Lang, tr, ui_lang
 from app.core.ratelimit import fetch_limit, scoring_limit
 from app.models.db import get_db
 from app.models.entities import Resume, StoredProfile
@@ -37,13 +38,18 @@ router = APIRouter(prefix="/api/scout", tags=["scout"])
 # Ceiling on how many jobs one request may score, whatever the client asks for.
 MAX_SHORTLIST = 20
 
+# How many roles from one employer may appear in a result list.
+MAX_PER_COMPANY = 3
+
 
 class FindRequest(BaseModel):
     resume_id: str
     title_hint: str = ""
     locations: list[str] = Field(default_factory=lambda: ["saudi", "riyadh"])
     industries: list[str] = Field(default_factory=list)
-    include_jsearch: bool = False
+    # On by default. The free ATS boards are a handful of companies; without
+    # the aggregator a search shows the same few names every time.
+    include_jsearch: bool = True
     linkedin_only: bool = False
     jsearch_query: str = ""
     # Filters. A value a posting does not state is "unknown"; whether those are
@@ -82,6 +88,16 @@ class FindResponse(BaseModel):
     # What the user should know about the sources: Google not searched and
     # why, or what it was searched for.
     notes: list[str] = Field(default_factory=list)
+
+
+class CachedJob(BaseModel):
+    id: str
+    title: str
+    company: str
+    location: str
+    description: str
+    apply_url: str
+    source: str
 
 
 class ScoreRequest(BaseModel):
@@ -154,7 +170,9 @@ def _latest_title(db: Session, resume_id: str) -> str:
 
 
 @router.post("/find", response_model=FindResponse, dependencies=[Depends(fetch_limit)])
-def find(request: FindRequest, db: Session = Depends(get_db)) -> FindResponse:
+def find(
+    request: FindRequest, db: Session = Depends(get_db), lang: Lang = Depends(ui_lang)
+) -> FindResponse:
     """Scan sources and rank against the CV. Free -- no model call."""
     settings = get_settings()
     resume_text = _resume_text(db, request.resume_id)
@@ -192,6 +210,17 @@ def find(request: FindRequest, db: Session = Depends(get_db)) -> FindResponse:
         title_hint=request.title_hint,
     )
 
+    # One employer with twenty openings would otherwise be the whole page.
+    per_company: dict[str, int] = {}
+    spread = []
+    for candidate in candidates:
+        name = candidate.job.company.strip().lower()
+        if name and per_company.get(name, 0) >= MAX_PER_COMPANY:
+            continue
+        per_company[name] = per_company.get(name, 0) + 1
+        spread.append(candidate)
+    candidates = spread
+
     by_source: dict[str, int] = {}
     for job in jobs:
         by_source[job.source] = by_source.get(job.source, 0) + 1
@@ -202,7 +231,7 @@ def find(request: FindRequest, db: Session = Depends(get_db)) -> FindResponse:
         total_found=len(jobs),
         by_source=by_source,
         hidden=dict(filtered.hidden),
-        notes=notes,
+        notes=[tr(note, lang) for note in notes],
         candidates=[
             CandidateOut(
                 id=c.job.dedupe_key, title=c.job.title, company=c.job.company,
@@ -218,8 +247,28 @@ def find(request: FindRequest, db: Session = Depends(get_db)) -> FindResponse:
     )
 
 
+@router.get("/jobs/{resume_id}/{job_id}", response_model=CachedJob)
+def cached_job(resume_id: str, job_id: str, lang: Lang = Depends(ui_lang)) -> CachedJob:
+    """One result from the last search, in full.
+
+    The search itself returns titles and places only. A description is several
+    thousand characters, and thirty of them would be sent for the one the user
+    opens -- so they stay here until then.
+    """
+    candidate = _CACHE.get(resume_id, {}).get(job_id)
+    if candidate is None:
+        raise HTTPException(409, "That search result has expired. Run the search again.")
+    job = candidate.job
+    return CachedJob(
+        id=job_id, title=job.title, company=job.company, location=job.location,
+        description=job.description, apply_url=job.apply_url, source=job.source,
+    )
+
+
 @router.post("/score", response_model=ScoreResponse, dependencies=[Depends(scoring_limit)])
-def score(request: ScoreRequest, db: Session = Depends(get_db)) -> ScoreResponse:
+def score(
+    request: ScoreRequest, db: Session = Depends(get_db), lang: Lang = Depends(ui_lang)
+) -> ScoreResponse:
     """Score the chosen shortlist with the model. This is the part that costs."""
     model = ScoutModel()
     if not model.has_credentials:
@@ -244,7 +293,7 @@ def score(request: ScoreRequest, db: Session = Depends(get_db)) -> ScoreResponse
         matches = match_all(model, resume_text, chosen, limit=MAX_SHORTLIST)
         built = brief_mod.build(
             matches, total_found=len(cached), limit=len(chosen),
-            client=model if request.headline else None,
+            client=model if request.headline else None, lang=lang,
         )
     except ScoutModelError as exc:
         raise HTTPException(502, str(exc)) from exc
@@ -260,7 +309,7 @@ def score(request: ScoreRequest, db: Session = Depends(get_db)) -> ScoreResponse
             LineOut(
                 id=match.job.dedupe_key if match else "",
                 score=line.score, title=line.title, company=line.company,
-                location=line.location, why=line.why, gap=line.gap,
+                location=line.location, why=tr(line.why, lang), gap=tr(line.gap, lang),
                 url=line.url, publisher=line.publisher,
                 matched=match.matched if match else [],
                 missing=match.missing_critical if match else [],

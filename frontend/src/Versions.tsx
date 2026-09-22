@@ -7,12 +7,97 @@ import {
   listVersions,
 } from './api';
 import { Entities } from './CvView';
+import { arCount, formatDate, useLang, useText } from './i18n';
 import { Filled } from './Tailor';
 import type { CvProfile, CvVersion, ExportFormat, PlaceholderSlot } from './types';
 
 const HAS_DIGIT = /[0-9٠-٩]/;
 const ARABIC_LETTERS = /[؀-ۿ]/g;
 const LATIN_LETTERS = /[A-Za-z]/g;
+
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
+
+const en = {
+  loadSlotsFailed: 'Could not load placeholders.',
+  saveFiguresFailed: 'Could not save those figures.',
+  loadFailed: 'Could not load versions.',
+  deleteFailed: 'Could not delete that version.',
+  exportFailed: 'Could not export that version.',
+  loadingSlots: 'Loading placeholders…',
+  figureNote:
+    'Each figure must be your real one. If you don’t have it, restore the original wording ' +
+    'instead — a guessed number is the kind of claim you will be asked about.',
+  yourFigure: (placeholder: string) => `Your figure for ${placeholder}`,
+  example: 'e.g. 40%',
+  noFigure: 'I don’t have this figure',
+  restores: 'Restores this item’s original wording.',
+  savingDots: 'Saving…',
+  saveFigures: 'Save figures',
+  cancel: 'Cancel',
+  needFigure: 'Every placeholder needs a figure with at least one digit, or to be restored.',
+  noVersions:
+    'No saved versions yet. Tailor your CV for a job — from a job match or a search result — to create one.',
+  asProvided: 'your CV as provided',
+  edits: (n: number, date: string) => `${plural(n, 'edit')} · ${date}`,
+  blocked: (n: number) =>
+    `${plural(n, 'placeholder')} still to fill in with your real figures. ` +
+    'It can’t be exported until each has a figure or is restored.',
+  fillFirst: 'Fill in the placeholders first',
+  preparing: 'Preparing…',
+  pdf: 'Download PDF',
+  word: 'Download Word',
+  fill: 'Fill in placeholders',
+  hide: 'Hide',
+  view: 'View',
+  delete: 'Delete',
+  arabicNote:
+    'For online applications, send the Word file. A PDF stores Arabic in a way some applicant ' +
+    'tracking systems misread — joined letters can come back swapped, and lines mixing Arabic ' +
+    'with numbers or English out of order. The Word file keeps the text exactly as written. ' +
+    'The PDF is best for reading and printing.',
+};
+
+const ar: typeof en = {
+  loadSlotsFailed: 'تعذّر تحميل الخانات.',
+  saveFiguresFailed: 'تعذّر حفظ هذه الأرقام.',
+  loadFailed: 'تعذّر تحميل النسخ.',
+  deleteFailed: 'تعذّر حذف هذه النسخة.',
+  exportFailed: 'تعذّر تصدير هذه النسخة.',
+  loadingSlots: 'جارٍ تحميل الخانات…',
+  figureNote:
+    'يجب أن يكون كل رقم هو رقمك الحقيقي. إن لم يكن لديك، فاستعد الصياغة الأصلية — فالرقم ' +
+    'المخمَّن من الادعاءات التي ستُسأل عنها.',
+  yourFigure: (placeholder: string) => `رقمك لـ${placeholder}`,
+  example: 'مثال: 40%',
+  noFigure: 'ليس لدي هذا الرقم',
+  restores: 'يستعيد الصياغة الأصلية لهذا العنصر.',
+  savingDots: 'جارٍ الحفظ…',
+  saveFigures: 'احفظ الأرقام',
+  cancel: 'إلغاء',
+  needFigure: 'تحتاج كل خانة إلى رقم يحتوي على خانة رقمية واحدة على الأقل، أو إلى استعادة صياغتها.',
+  noVersions:
+    'لا توجد نسخ محفوظة بعد. خصّص سيرتك الذاتية لوظيفة — من مطابقة وظيفة أو من نتيجة بحث — لإنشاء واحدة.',
+  asProvided: 'سيرتك الذاتية كما قدّمتها',
+  edits: (n: number, date: string) =>
+    `${arCount(n, { one: 'تعديل واحد', two: 'تعديلان', few: 'تعديلات', many: 'تعديلًا' })} · ${date}`,
+  blocked: (n: number) =>
+    `${arCount(n, { one: 'خانة واحدة', two: 'خانتان', few: 'خانات', many: 'خانة' })} لا تزال بحاجة ` +
+    'إلى أرقامك الحقيقية. لا يمكن تصديرها حتى تُملأ كل خانة أو تُستعاد صياغتها.',
+  fillFirst: 'املأ الخانات أولًا',
+  preparing: 'جارٍ التحضير…',
+  pdf: 'تنزيل PDF',
+  word: 'تنزيل Word',
+  fill: 'املأ الخانات',
+  hide: 'إخفاء',
+  view: 'عرض',
+  delete: 'حذف',
+  arabicNote:
+    'للتقديم عبر الإنترنت، أرسل ملف Word. يخزّن ملف PDF النص العربي بطريقة تسيء بعض أنظمة ' +
+    'تتبّع المتقدمين قراءتها — فقد تنعكس الحروف المتصلة، وتضطرب الأسطر التي تخلط العربية ' +
+    'بالأرقام أو الإنجليزية. يحفظ ملف Word النص كما كُتب تمامًا، أما PDF فهو الأفضل للقراءة والطباعة.',
+};
+
+const TEXT = { en, ar };
 
 /* The same rule the server uses to lay the export out right to left: Arabic
    letters outnumber Latin ones. Counted over the CV's words, not its JSON, so
@@ -40,6 +125,7 @@ function PlaceholderForm({
   onDone: (updated: CvVersion) => void;
   onCancel: () => void;
 }) {
+  const t = useText(TEXT);
   const [slots, setSlots] = useState<PlaceholderSlot[] | null>(null);
   const [values, setValues] = useState<Record<number, string>>({});
   const [dropped, setDropped] = useState<Set<number>>(new Set());
@@ -53,7 +139,7 @@ function PlaceholderForm({
         if (!cancelled) setSlots(found);
       })
       .catch((err: unknown) => {
-        if (!cancelled) setError(err instanceof Error ? err.message : 'Could not load placeholders.');
+        if (!cancelled) setError(err instanceof Error ? err.message : TEXT.en.loadSlotsFailed);
       });
     return () => {
       cancelled = true;
@@ -90,21 +176,18 @@ function PlaceholderForm({
       );
       onDone(await fillPlaceholders(version.id, fills, [...dropped]));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not save those figures.');
+      setError(err instanceof Error ? err.message : t.saveFiguresFailed);
     } finally {
       setWorking(false);
     }
   }
 
   if (error && !slots) return <p className="error">{error}</p>;
-  if (!slots) return <p className="note">Loading placeholders…</p>;
+  if (!slots) return <p className="note">{t.loadingSlots}</p>;
 
   return (
     <form className="placeholder-form" onSubmit={submit}>
-      <p className="note">
-        Each figure must be your real one. If you don&apos;t have it, restore the original
-        wording instead — a guessed number is the kind of claim you will be asked about.
-      </p>
+      <p className="note">{t.figureNote}</p>
       <ol>
         {slots.map((slot) => {
           const restored = droppedTargets.has(slot.target);
@@ -115,13 +198,14 @@ function PlaceholderForm({
                 <Filled text={slot.text} />
               </p>
               <label>
-                <span className="label-text">Your figure for {slot.placeholder}</span>
+                <span className="label-text">{t.yourFigure(slot.placeholder)}</span>
                 <input
                   type="text"
+                  dir="auto"
                   maxLength={32}
                   value={values[slot.index] ?? ''}
                   disabled={restored}
-                  placeholder="e.g. 40%"
+                  placeholder={t.example}
                   onChange={(e) => setValues((prev) => ({ ...prev, [slot.index]: e.target.value }))}
                 />
               </label>
@@ -132,8 +216,8 @@ function PlaceholderForm({
                   onChange={() => toggleDrop(slot.index)}
                 />
                 <span>
-                  I don&apos;t have this figure
-                  <em>Restores this item&apos;s original wording.</em>
+                  {t.noFigure}
+                  <em>{t.restores}</em>
                 </span>
               </label>
             </li>
@@ -143,17 +227,13 @@ function PlaceholderForm({
       {error && <p className="error">{error}</p>}
       <div className="actions">
         <button type="submit" disabled={!ready || working}>
-          {working ? 'Saving…' : 'Save figures'}
+          {working ? t.savingDots : t.saveFigures}
         </button>
         <button type="button" onClick={onCancel}>
-          Cancel
+          {t.cancel}
         </button>
       </div>
-      {!ready && (
-        <p className="cost-note">
-          Every placeholder needs a figure with at least one digit, or to be restored.
-        </p>
-      )}
+      {!ready && <p className="cost-note">{t.needFigure}</p>}
     </form>
   );
 }
@@ -162,6 +242,8 @@ function PlaceholderForm({
    newest first. The original cannot be deleted from here -- it *is* the CV, and
    removing it means deleting the CV, which takes every version with it. */
 export default function Versions({ resumeId }: { resumeId: string }) {
+  const t = useText(TEXT);
+  const lang = useLang();
   const [versions, setVersions] = useState<CvVersion[] | null>(null);
   const [open, setOpen] = useState<string | null>(null);
   const [filling, setFilling] = useState<string | null>(null);
@@ -175,12 +257,12 @@ export default function Versions({ resumeId }: { resumeId: string }) {
         if (!cancelled) setVersions(rows);
       })
       .catch((err: unknown) => {
-        if (!cancelled) setError(err instanceof Error ? err.message : 'Could not load versions.');
+        if (!cancelled) setError(err instanceof Error ? err.message : TEXT[lang].loadFailed);
       });
     return () => {
       cancelled = true;
     };
-  }, [resumeId]);
+  }, [resumeId, lang]);
 
   async function remove(id: string) {
     setError(null);
@@ -189,7 +271,7 @@ export default function Versions({ resumeId }: { resumeId: string }) {
       setVersions((prev) => prev?.filter((v) => v.id !== id) ?? null);
       if (open === id) setOpen(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not delete that version.');
+      setError(err instanceof Error ? err.message : t.deleteFailed);
     }
   }
 
@@ -199,7 +281,7 @@ export default function Versions({ resumeId }: { resumeId: string }) {
     try {
       await downloadExport(version.id, format);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not export that version.');
+      setError(err instanceof Error ? err.message : t.exportFailed);
     } finally {
       setExporting(null);
     }
@@ -212,15 +294,8 @@ export default function Versions({ resumeId }: { resumeId: string }) {
 
   if (!versions) return error ? <p className="error">{error}</p> : null;
   if (versions.length === 0) {
-    return (
-      <p className="note">
-        No saved versions yet. Tailor your CV for a job — from a job match or a search result — to
-        create one.
-      </p>
-    );
+    return <p className="note">{t.noVersions}</p>;
   }
-
-  const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
   return (
     <div className="versions">
@@ -230,20 +305,15 @@ export default function Versions({ resumeId }: { resumeId: string }) {
         return (
           <article className="finding" key={v.id}>
             <div className="finding-head">
-              <strong>{v.name}</strong>
+              <strong dir="auto">{v.name}</strong>
               <span className="via">
                 {v.is_original
-                  ? 'your CV as provided'
-                  : `${plural(v.accepted_edit_ids.length, 'edit')} · ${new Date(v.created_at).toLocaleDateString()}`}
+                  ? t.asProvided
+                  : t.edits(v.accepted_edit_ids.length, formatDate(v.created_at, lang))}
               </span>
             </div>
 
-            {blocked && (
-              <p className="fix">
-                {plural(v.placeholders, 'placeholder')} still to fill in with your real figures.
-                It can&apos;t be exported until each has a figure or is restored.
-              </p>
-            )}
+            {blocked && <p className="fix">{t.blocked(v.placeholders)}</p>}
 
             <div className="actions export-row">
               {(['pdf', 'docx'] as ExportFormat[]).map((format) => {
@@ -253,10 +323,10 @@ export default function Versions({ resumeId }: { resumeId: string }) {
                     type="button"
                     key={format}
                     disabled={blocked || exporting !== null}
-                    title={blocked ? 'Fill in the placeholders first' : undefined}
+                    title={blocked ? t.fillFirst : undefined}
                     onClick={() => download(v, format)}
                   >
-                    {busy ? 'Preparing…' : format === 'pdf' ? 'Download PDF' : 'Download Word'}
+                    {busy ? t.preparing : format === 'pdf' ? t.pdf : t.word}
                   </button>
                 );
               })}
@@ -266,7 +336,7 @@ export default function Versions({ resumeId }: { resumeId: string }) {
                   aria-expanded={filling === v.id}
                   onClick={() => setFilling(filling === v.id ? null : v.id)}
                 >
-                  Fill in placeholders
+                  {t.fill}
                 </button>
               )}
               <button
@@ -274,23 +344,16 @@ export default function Versions({ resumeId }: { resumeId: string }) {
                 aria-expanded={open === v.id}
                 onClick={() => setOpen(open === v.id ? null : v.id)}
               >
-                {open === v.id ? 'Hide' : 'View'}
+                {open === v.id ? t.hide : t.view}
               </button>
               {!v.is_original && (
                 <button type="button" onClick={() => remove(v.id)}>
-                  Delete
+                  {t.delete}
                 </button>
               )}
             </div>
 
-            {isArabic(v.profile) && !blocked && (
-              <p className="note">
-                For online applications, send the Word file. A PDF stores Arabic in a way some
-                applicant tracking systems misread — joined letters can come back swapped, and
-                lines mixing Arabic with numbers or English out of order. The Word file keeps
-                the text exactly as written. The PDF is best for reading and printing.
-              </p>
-            )}
+            {isArabic(v.profile) && !blocked && <p className="note">{t.arabicNote}</p>}
 
             {filling === v.id && (
               <PlaceholderForm version={v} onDone={replaced} onCancel={() => setFilling(null)} />

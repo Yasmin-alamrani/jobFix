@@ -23,6 +23,7 @@ import logging
 from pydantic import BaseModel, Field
 
 from app.core.gemini import get_gemini, text_block
+from app.core.i18n import Lang, tr, tr_fields, with_language
 from app.prompts import data_block, fields_v1
 
 from .industries import PACKS
@@ -177,7 +178,7 @@ def score_field(candidate: FieldCandidate) -> FieldFit | None:
     )
 
 
-def suggest_fields(resume_text: str, *, limit: int = 5) -> list[FieldFit]:
+def suggest_fields(resume_text: str, *, limit: int = 5, lang: Lang = "en") -> list[FieldFit]:
     """The fields this CV fits, best first.
 
     Returns [] rather than raising when nothing clears `WORTH_SHOWING`. An empty
@@ -190,11 +191,22 @@ def suggest_fields(resume_text: str, *, limit: int = 5) -> list[FieldFit]:
 
     result = get_gemini().call_structured(
         schema=FieldCandidates,
-        system=fields_v1.system(_catalogue()),
+        system=with_language(fields_v1.system(_catalogue()), lang),
         content=[text_block(data_block("resume_text", text[:30_000]))],
     )
 
     scored = [fit for fit in map(score_field, result.fields) if fit is not None]
     scored = [fit for fit in scored if fit.score >= WORTH_SHOWING]
     scored.sort(key=lambda fit: fit.score, reverse=True)
-    return scored[:limit]
+    return [_localized(fit, lang) for fit in scored[:limit]]
+
+
+def _localized(fit: FieldFit, lang: Lang) -> FieldFit:
+    """The field's name and the arithmetic's wording in the page's language.
+    The justification is the model's, already written in it."""
+    if lang != "ar":
+        return fit
+    return fit.model_copy(update={
+        "label": tr(fit.label, lang),
+        "components": [tr_fields(c, lang, "label", "why") for c in fit.components],
+    })

@@ -7,7 +7,7 @@
    type wherever text is quoted verbatim from the document under examination.
 --------------------------------------------------------------------------- */
 
-@import url('https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800&family=Public+Sans:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;500;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800&family=Public+Sans:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;500;700&family=Tajawal:wght@400;500;700;800&display=swap');
 
 :root {
   --ink:        #12161c;
@@ -181,12 +181,13 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
 .note {
   font-size: 0.8125rem;
   color: var(--ink-3);
-  border-left: 2px solid var(--rule);
-  padding-left: 0.75rem;
+  border-inline-start: 2px solid var(--rule);
+  padding-inline-start: 0.75rem;
 }
 .error {
-  border-left: 2px solid var(--critical);
-  padding: 0.625rem 0 0.625rem 0.75rem;
+  border-inline-start: 2px solid var(--critical);
+  padding-block: 0.625rem;
+  padding-inline: 0.75rem 0;
   color: var(--critical);
   font-size: 0.875rem;
   background: color-mix(in srgb, var(--critical) 6%, transparent);
@@ -211,7 +212,7 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
   padding: 0.3125rem 0;
 }
 .ledger-line.start { color: var(--ink-3); }
-.ledger-line .amount { text-align: right; font-weight: 500; font-variant-numeric: tabular-nums; }
+.ledger-line .amount { text-align: end; font-weight: 500; font-variant-numeric: tabular-nums; }
 .ledger-line .what { font-family: var(--body); color: var(--ink-2); }
 .ledger-line .rule-id { color: var(--ink-3); font-size: 0.6875rem; }
 .ledger-line.critical .amount { color: var(--critical); }
@@ -257,13 +258,13 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
 .finding {
   background: var(--card);
   border: 1px solid var(--rule);
-  border-left: 3px solid var(--minor);
+  border-inline-start: 3px solid var(--minor);
   border-radius: var(--radius);
   padding: 1rem 1.125rem;
   margin-bottom: 0.75rem;
 }
-.finding.critical { border-left-color: var(--critical); }
-.finding.major    { border-left-color: var(--major); }
+.finding.critical { border-inline-start-color: var(--critical); }
+.finding.major    { border-inline-start-color: var(--major); }
 .finding-head { display: flex; justify-content: space-between; gap: 1rem; align-items: baseline; }
 .finding-head h3 { font-size: 0.9375rem; font-weight: 600; }
 .cost {
@@ -301,7 +302,7 @@ th {
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--ink-3);
-  text-align: left;
+  text-align: start;
   font-weight: 500;
   padding: 0.625rem 0.875rem;
   border-bottom: 1px solid var(--rule);
@@ -430,7 +431,7 @@ td a:hover { text-decoration-color: var(--blueprint); }
   font-family: var(--mono);
   font-size: 0.625rem;
   color: var(--ink-3);
-  margin-left: 0.4rem;
+  margin-inline-start: 0.4rem;
   white-space: nowrap;
 }
 
@@ -475,10 +476,8 @@ td a:hover { text-decoration-color: var(--blueprint); }
   margin: 2rem 0 0.875rem;
 }
 
-/* The review. Finding titles are <strong>, not <h3>: `.profile h3` styles the
-   small uppercase section labels and would otherwise restyle every card title. */
+/* The review. */
 .review-tally { font-family: var(--mono); font-size: 0.75rem; color: var(--ink-3); margin: 0.5rem 0 0; }
-.finding-title { font-size: 0.9375rem; font-weight: 600; }
 .area {
   font-family: var(--mono);
   font-size: 0.6875rem;
@@ -506,7 +505,7 @@ mark.slot {
 .strengths li {
   background: var(--card);
   border: 1px solid var(--rule);
-  border-left: 3px solid var(--earned);
+  border-inline-start: 3px solid var(--earned);
   border-radius: var(--radius);
   padding: 0.75rem 1rem;
   font-size: 0.875rem;
@@ -607,7 +606,7 @@ mark.placeholder {
 }
 
 /* Reorders read as two numbered lists; moved items carry the weight. */
-ol.diff-side { margin: 0; padding-left: 1.6rem; text-decoration: none; }
+ol.diff-side { margin: 0; padding-inline-start: 1.6rem; text-decoration: none; }
 ol.diff-side li { margin-bottom: 0.2rem; }
 ol.diff-side li.moved { font-weight: 600; }
 
@@ -647,9 +646,6 @@ ol.diff-side li.moved { font-weight: 600; }
 /* --- Search filters and job-link analysis ---------------------------------- */
 
 .filters { margin-top: 0.5rem; }
-.levels { border: 0; padding: 0; margin: 0.75rem 0 0; display: flex; flex-wrap: wrap; gap: 0.35rem 1rem; }
-.levels legend { margin-bottom: 0.35rem; width: 100%; }
-.check-inline { display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.875rem; }
 
 .breakdown {
   display: grid;
@@ -780,9 +776,9 @@ button.theme-toggle:hover:not(:disabled) { background: var(--card); color: var(-
 }
 .dropzone-lead { margin: 0 0 1.25rem; color: var(--ink-2); font-size: 1.0625rem; }
 .dropzone-lead small { display: block; color: var(--ink-3); font-size: 0.875rem; margin-top: 0.25rem; }
-.dropzone label { text-align: left; }
+.dropzone label { text-align: start; }
 .dropzone textarea { min-height: 180px; }
-.dropzone .working, .dropzone .error { text-align: left; margin-top: 1rem; }
+.dropzone .working, .dropzone .error { text-align: start; margin-top: 1rem; }
 .dropzone-hint { font-size: 0.8125rem; color: var(--ink-3); margin: 0.6rem 0 0; }
 .paste-actions { display: flex; flex-wrap: wrap; gap: 1rem; justify-content: center; align-items: center; margin-top: 1rem; }
 
@@ -819,7 +815,7 @@ button.linklike:hover:not(:disabled) { background: none; color: var(--ink); }
   max-width: 30rem;
   font-size: 0.8125rem;
   color: var(--ink-3);
-  text-align: left;
+  text-align: start;
 }
 .privacy svg { width: 14px; height: 14px; flex-shrink: 0; margin-top: 0.2rem; }
 
@@ -868,3 +864,134 @@ button.linklike:hover:not(:disabled) { background: none; color: var(--ink); }
 }
 .cv-actions button:hover:not(:disabled) { background: var(--paper); color: var(--ink); }
 .cv-actions button.danger:hover:not(:disabled) { color: var(--critical); border-color: var(--critical); background: transparent; }
+
+/* --- Arabic ---------------------------------------------------------------
+   The page flips with dir="rtl" on <html>; the rules above use logical
+   properties (inline-start, not left) so every border and indent follows. */
+.topbar-actions { display: flex; align-items: center; gap: 0.5rem; }
+
+html[lang='ar'] {
+  --display: 'Tajawal', system-ui, sans-serif;
+  --body:    'Tajawal', system-ui, sans-serif;
+  /* Not the mono face: a monospaced font lends its wide space to Arabic words
+     drawn from the fallback, and the labels come out as w o r d s. Quotes stay
+     set apart by their tinted boxes. */
+  --mono:    'Tajawal', ui-monospace, monospace;
+}
+
+/* A phone has room for the name and two controls only if the theme toggle
+   drops its label; its icon says the same thing. */
+@media (max-width: 480px) {
+  .brand { white-space: nowrap; }
+  .theme-toggle svg + span { display: none; }
+}
+/* Letter-spacing breaks Arabic's joined letters apart, and Arabic has no
+   true italic -- the browser would slant it, which reads as broken. */
+html[lang='ar'] *,
+html[lang='ar'] *::before,
+html[lang='ar'] *::after { letter-spacing: normal !important; }
+html[lang='ar'] :is(.verdict, .lede, em) { font-style: normal; }
+html[lang='ar'] body { line-height: 1.7; }
+
+/* Links and URLs read left to right whatever the page does. */
+html[dir='rtl'] input[type='url'] { direction: ltr; text-align: left; }
+
+html[dir='rtl'] .sweep i { animation-name: sweep-rtl; }
+@keyframes sweep-rtl { 0% { transform: translateX(100%); } 100% { transform: translateX(-350%); } }
+
+/* --- Find jobs -------------------------------------------------------------
+   A search, a row of filters, and the results as cards. The relevance bar sits
+   at the top of each card, unlabelled: it ranks, it does not grade.          */
+.job-search { gap: 0.875rem; }
+.search-row { display: grid; grid-template-columns: 2fr 2fr auto; gap: 0.75rem; align-items: end; }
+.search-row button { justify-self: stretch; padding-block: 0.6875rem; }
+@media (max-width: 640px) { .search-row { grid-template-columns: 1fr; } }
+
+.filter-row { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+.filter-row select { width: auto; font-size: 0.8125rem; padding: 0.375rem 0.5rem; }
+
+.job-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(255px, 1fr)); gap: 0.875rem; }
+.job-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3125rem;
+  background: var(--card);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  padding: 1rem 1.125rem;
+}
+.job-card .relbar { margin-bottom: 0.375rem; }
+.job-company { margin: 0; font-size: 0.8125rem; font-weight: 600; color: var(--ink-2); }
+.job-card h3 { font-size: 0.9375rem; font-weight: 600; line-height: 1.35; }
+.job-card h3 a { color: var(--ink); text-decoration-color: var(--rule); text-underline-offset: 2px; }
+.job-card h3 a:hover { text-decoration-color: var(--blueprint); }
+.job-card .q { margin: 0; font-family: var(--mono); font-size: 0.75rem; color: var(--ink-3); }
+.job-overlap { margin: 0.25rem 0 0; font-size: 0.8125rem; color: var(--ink-2); }
+.job-card .actions { margin-top: auto; padding-top: 0.75rem; }
+.job-card .actions button { font-size: 0.8125rem; padding: 0.4375rem 0.875rem; }
+
+/* --- The CV report as a checklist -----------------------------------------
+   One line per thing checked: a tick or a mark, the heading, and the evidence
+   folded away behind "show details" so the page can be read in one pass.    */
+.check-group { margin-top: 1.5rem; }
+.check-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  border-bottom: 1px solid var(--rule);
+  padding-bottom: 0.4375rem;
+  margin-bottom: 0.5rem;
+}
+.check-head h4 { margin: 0; font-size: 0.9375rem; font-weight: 600; }
+.check-head .count {
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.count.ok { color: var(--earned); }
+.count.bad { color: var(--major); }
+
+.check-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.25rem; }
+.check-row { display: flex; gap: 0.625rem; align-items: flex-start; padding: 0.4375rem 0; }
+.check-row .mark { flex: 0 0 1.1rem; text-align: center; font-size: 0.875rem; line-height: 1.5; }
+.check-row.ok .mark { color: var(--earned); }
+.check-row.critical .mark { color: var(--critical); }
+.check-row.major .mark { color: var(--major); }
+.check-row.minor .mark { color: var(--minor); }
+.check-body { flex: 1; min-width: 0; }
+/* Titles are <strong>, not <h3>: `.profile h3` styles the small uppercase
+   section labels and would otherwise restyle every line of the checklist. */
+.check-title {
+  margin: 0;
+  font-size: 0.9375rem;
+  display: flex;
+  gap: 0.5rem;
+  align-items: baseline;
+  flex-wrap: wrap;
+}
+/* A passing line is reassurance, not a headline: it reads lighter than a problem. */
+.check-row.ok .check-title strong { font-weight: 400; color: var(--ink-2); }
+.check-tag {
+  font-family: var(--mono);
+  font-size: 0.625rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.check-row.critical .check-tag { color: var(--critical); }
+.check-row.major .check-tag { color: var(--major); }
+.check-note {
+  margin: 0.125rem 0 0;
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.check-row details > summary { margin-top: 0.375rem; cursor: pointer; font-size: 0.8125rem; color: var(--ink-3); }
+.check-detail { margin-top: 0.5rem; }
+.check-detail .fix + .fix { margin-top: 0.375rem; }
+.check-detail .q { display: block; font-family: var(--mono); font-size: 0.75rem; color: var(--ink-3); }

@@ -85,6 +85,16 @@ export interface ScoutCandidate {
   posted_at: string | null;
 }
 
+export interface CachedJob {
+  id: string;
+  title: string;
+  company: string;
+  location: string;
+  description: string;
+  apply_url: string;
+  source: string;
+}
+
 export interface FindResponse {
   total_found: number;
   by_source: Record<string, number>;

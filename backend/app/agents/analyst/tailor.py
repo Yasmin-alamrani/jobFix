@@ -36,6 +36,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 from app.core.gemini import get_gemini, text_block
+from app.core.i18n import Lang, with_language
 from app.prompts import data_block, tailor_v1
 
 from .profile import CvProfile
@@ -583,7 +584,8 @@ def render_for_model(profile: CvProfile) -> str:
 
 
 def propose(
-    profile: CvProfile, *, job_title: str, company: str, job_description: str
+    profile: CvProfile, *, job_title: str, company: str, job_description: str,
+    lang: Lang = "en",
 ) -> Proposal:
     """One model call, then `review`. Title and company travel inside the fence:
     they come from the same untrusted posting as the description does."""
@@ -595,7 +597,7 @@ def propose(
 
     call = get_gemini().call_structured(
         schema=TailorCall,
-        system=tailor_v1.SYSTEM,
+        system=with_language(tailor_v1.SYSTEM, lang),
         content=[text_block(
             data_block("job_description", posting)
             + "\n\n"

@@ -21,6 +21,7 @@ from app.agents.analyst.profile import CvProfile
 from app.agents.analyst.provenance import PLACEHOLDER
 from app.api.resumes import model_errors, ensure_profile, owned_resume
 from app.core.config import get_settings
+from app.core.i18n import Lang, tr, ui_lang
 from app.core.ratelimit import analysis_limit
 from app.models.db import get_db
 from app.models.entities import CvVersion, Job, Resume, StoredProfile, TailorProposal
@@ -149,10 +150,12 @@ def ensure_original(db: Session, resume: Resume, stored: StoredProfile) -> CvVer
     return original
 
 
-def _version_out(row: CvVersion) -> VersionOut:
+def _version_out(row: CvVersion, lang: Lang = "en") -> VersionOut:
     text = CvProfile.model_validate(row.profile).all_text
+    # Only the names the app gave. A name the user typed is theirs, as typed.
+    name = tr(row.name, lang) if row.is_original or row.name == "Tailored CV" else row.name
     return VersionOut(
-        id=row.id, name=row.name, resume_id=row.resume_id, job_id=row.job_id,
+        id=row.id, name=name, resume_id=row.resume_id, job_id=row.job_id,
         job_title=row.job_title, company=row.company, is_original=row.is_original,
         accepted_edit_ids=list(row.accepted_edit_ids or []),
         placeholders=len(PLACEHOLDER.findall(text)),
@@ -167,8 +170,22 @@ def _owned_version(db: Session, version_id: str) -> CvVersion:
     return row
 
 
+def _localized_edits(edits: list[dict], lang: Lang) -> list[dict]:
+    """Labels and reasons in the page's language. The edit text itself is the
+    CV's, in the CV's language, and the stored copy stays in English."""
+    if lang != "ar":
+        return edits
+    return [
+        {**e, "label": tr(e.get("label", ""), lang),
+         "violations": [tr(v, lang) for v in e.get("violations", [])]}
+        for e in edits
+    ]
+
+
 @router.post("/tailor", response_model=ProposalOut, dependencies=[Depends(analysis_limit)])
-def create_proposal(request: TailorRequest, db: Session = Depends(get_db)) -> ProposalOut:
+def create_proposal(
+    request: TailorRequest, db: Session = Depends(get_db), lang: Lang = Depends(ui_lang)
+) -> ProposalOut:
     """Propose edits for one job. One model call; the result is stored so that
     accepting edits later refers to exactly what was reviewed."""
     resume = owned_resume(db, request.resume_id)
@@ -179,7 +196,7 @@ def create_proposal(request: TailorRequest, db: Session = Depends(get_db)) -> Pr
     with model_errors("tailoring"):
         proposal = tailor.propose(
             profile, job_title=job.title, company=job.company,
-            job_description=job.description,
+            job_description=job.description, lang=lang,
         )
 
     row = TailorProposal(
@@ -195,15 +212,17 @@ def create_proposal(request: TailorRequest, db: Session = Depends(get_db)) -> Pr
     db.commit()
 
     return ProposalOut(
-        proposal_id=row.id, job_id=job.id, job_title=job.title, company=job.company,
-        edits=row.edits, blocked=row.blocked, gaps=row.gaps,
-        prompt_version=row.prompt_version,
+        proposal_id=row.id, job_id=job.id, job_title=tr(job.title, lang)
+        if job.title == "Untitled role" else job.title, company=job.company,
+        edits=_localized_edits(row.edits, lang), blocked=_localized_edits(row.blocked, lang),
+        gaps=row.gaps, prompt_version=row.prompt_version,
     )
 
 
 @router.post("/tailor/{proposal_id}/versions", response_model=VersionOut)
 def save_version(
-    proposal_id: str, request: SaveVersionRequest, db: Session = Depends(get_db)
+    proposal_id: str, request: SaveVersionRequest, db: Session = Depends(get_db),
+    lang: Lang = Depends(ui_lang),
 ) -> VersionOut:
     """Apply the accepted edits and store the result as a named version.
 
@@ -265,11 +284,13 @@ def save_version(
     )
     db.add(row)
     db.commit()
-    return _version_out(row)
+    return _version_out(row, lang)
 
 
 @router.get("/resumes/{resume_id}/versions", response_model=list[VersionOut])
-def list_versions(resume_id: str, db: Session = Depends(get_db)) -> list[VersionOut]:
+def list_versions(
+    resume_id: str, db: Session = Depends(get_db), lang: Lang = Depends(ui_lang)
+) -> list[VersionOut]:
     """Every saved version of a CV: the original first, then newest first."""
     resume = owned_resume(db, resume_id)
     stored = db.query(StoredProfile).filter_by(resume_id=resume_id).one_or_none()
@@ -279,12 +300,14 @@ def list_versions(resume_id: str, db: Session = Depends(get_db)) -> list[Version
 
     rows = db.query(CvVersion).filter_by(resume_id=resume_id).all()
     rows.sort(key=lambda r: (not r.is_original, -r.created_at.timestamp()))
-    return [_version_out(r) for r in rows]
+    return [_version_out(r, lang) for r in rows]
 
 
 @router.get("/versions/{version_id}", response_model=VersionOut)
-def get_version(version_id: str, db: Session = Depends(get_db)) -> VersionOut:
-    return _version_out(_owned_version(db, version_id))
+def get_version(
+    version_id: str, db: Session = Depends(get_db), lang: Lang = Depends(ui_lang)
+) -> VersionOut:
+    return _version_out(_owned_version(db, version_id), lang)
 
 
 @router.delete("/versions/{version_id}", status_code=204, response_class=Response)

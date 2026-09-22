@@ -1,115 +1,202 @@
 import { useMemo, useState } from 'react';
-import { findJobs, scoreJobs } from './api';
-import { TailorButton } from './Tailor';
-import type { FindResponse, ScoreResponse, ScoutCandidate } from './types';
+import { findJobs, getCachedJob } from './api';
+import { useText } from './i18n';
+import type { FindResponse, JobIn, ScoutCandidate } from './types';
 
-/* The two steps are deliberately separate in the UI as well as the API.
-   Searching is free and instant; scoring costs money and takes time. Folding
-   them into one button would hide the cost behind a spinner and spend it on
-   jobs the user never wanted. */
-
-const DEFAULT_SHORTLIST = 8;
+/* Finding jobs is free: the search runs over job boards and Google for Jobs,
+   and the ranking against the CV is arithmetic, not a model call. So the page
+   asks for nothing but a search -- no sources to tick, no shortlist to select.
+   The one paid step, reading a posting against the CV in full, is a button on
+   the job the user actually wants. */
 
 const LEVELS = ['intern', 'junior', 'mid', 'senior', 'lead'] as const;
-const LEVEL_LABEL: Record<string, string> = {
-  intern: 'Intern',
-  junior: 'Junior',
-  mid: 'Mid-level',
-  senior: 'Senior',
-  lead: 'Lead / manager',
+
+const en = {
+  level: {
+    intern: 'Intern',
+    junior: 'Junior',
+    mid: 'Mid-level',
+    senior: 'Senior',
+    lead: 'Lead / manager',
+  } as Record<string, string>,
+  mode: { remote: 'remote', hybrid: 'hybrid', onsite: 'on-site' } as Record<string, string>,
+  hidden: {
+    work_mode: 'with another work arrangement',
+    work_mode_unstated: 'that state no work arrangement',
+    seniority: 'at another level',
+    seniority_unstated: 'whose title states no level',
+    posted: 'posted earlier',
+    posted_unstated: 'with no posting date',
+  } as Record<string, string>,
+  hiddenPart: (n: number, label: string) => `${n} ${label}`,
+  listSep: ', ',
+  filtersHid: (parts: string) => `Filters hid ${parts}.`,
+  fromBoards: (n: number) => `${n} from company job boards`,
+  fromGoogle: (n: number) => `${n} from Google for Jobs (LinkedIn, Bayt, Indeed and others)`,
+  noDate: 'date not stated',
+  today: 'today',
+  yesterday: 'yesterday',
+  daysAgo: (n: number) => `${n} days ago`,
+  weeksAgo: (n: number) => `${n} weeks ago`,
+  monthsAgo: (n: number) => `${n} months ago`,
+  noLevel: 'level not stated',
+  noMode: 'arrangement not stated',
+  searchFailed: 'Search failed.',
+  uploadFirst: 'Upload a resume above first — the search ranks jobs against it.',
+  role: 'Role you want',
+  rolePlaceholder: 'Leave empty to use your CV',
+  locations: 'Where',
+  filters: 'Filters',
+  anyTime: 'Any time',
+  day: 'Last 24 hours',
+  week: 'Last 7 days',
+  month: 'Last 30 days',
+  anyMode: 'Anywhere',
+  remote: 'Remote',
+  hybrid: 'Hybrid',
+  onsite: 'On-site',
+  anyLevel: 'Any level',
+  clear: 'Clear filters',
+  searching: 'Searching job boards and Google for Jobs…',
+  search: 'Find jobs',
+  found: (shown: number, total: number) => `${shown} best matches of ${total} found`,
+  ranked: 'Ranked by how much each posting overlaps with your CV. Free — no AI yet.',
+  nothing: 'No jobs matched. Try a different role, or widen the places.',
+  matchIt: 'Match against my CV',
+  opening: 'Opening…',
+  shared: 'Shared with your CV:',
+  via: (publisher: string) => `via ${publisher}`,
+  openPosting: 'Open posting',
+  expired: 'That result has expired. Search again.',
 };
 
-const HIDDEN_LABEL: Record<string, string> = {
-  work_mode: 'with another work arrangement',
-  work_mode_unstated: 'that state no work arrangement',
-  seniority: 'at another level',
-  seniority_unstated: 'whose title states no level',
-  posted: 'posted earlier',
-  posted_unstated: 'with no posting date',
+const ar: typeof en = {
+  level: {
+    intern: 'متدرب',
+    junior: 'مبتدئ',
+    mid: 'متوسط الخبرة',
+    senior: 'أول',
+    lead: 'قائد / مدير',
+  },
+  mode: { remote: 'عن بُعد', hybrid: 'هجين', onsite: 'في المقر' },
+  hidden: {
+    work_mode: 'بنمط عمل آخر',
+    work_mode_unstated: 'لا تذكر نمط العمل',
+    seniority: 'بمستوى آخر',
+    seniority_unstated: 'لا يذكر مسماها المستوى',
+    posted: 'منشورة قبل ذلك',
+    posted_unstated: 'بلا تاريخ نشر',
+  },
+  hiddenPart: (n: number, label: string) => `${n} ${label}`,
+  listSep: '، ',
+  filtersHid: (parts: string) => `أخفت عوامل التصفية ${parts}.`,
+  fromBoards: (n: number) => `${n} من لوحات وظائف الشركات`,
+  fromGoogle: (n: number) => `${n} من Google للوظائف (LinkedIn وبيت.كوم وIndeed وغيرها)`,
+  noDate: 'التاريخ غير مذكور',
+  today: 'اليوم',
+  yesterday: 'أمس',
+  daysAgo: (n: number) => `قبل ${n} أيام`,
+  weeksAgo: (n: number) => `قبل ${n} أسابيع`,
+  monthsAgo: (n: number) => `قبل ${n} أشهر`,
+  noLevel: 'المستوى غير مذكور',
+  noMode: 'نمط العمل غير مذكور',
+  searchFailed: 'فشل البحث.',
+  uploadFirst: 'ارفع سيرتك الذاتية أولًا — فالبحث يرتّب الوظائف وفقها.',
+  role: 'الدور الذي تريده',
+  rolePlaceholder: 'اتركه فارغًا لاستخدام سيرتك الذاتية',
+  locations: 'أين',
+  filters: 'عوامل التصفية',
+  anyTime: 'أي وقت',
+  day: 'آخر 24 ساعة',
+  week: 'آخر 7 أيام',
+  month: 'آخر 30 يومًا',
+  anyMode: 'أي مكان',
+  remote: 'عن بُعد',
+  hybrid: 'هجين',
+  onsite: 'في المقر',
+  anyLevel: 'أي مستوى',
+  clear: 'امسح عوامل التصفية',
+  searching: 'جارٍ البحث في لوحات الوظائف وGoogle للوظائف…',
+  search: 'ابحث عن وظائف',
+  found: (shown: number, total: number) => `أفضل ${shown} نتيجة من أصل ${total}`,
+  ranked: 'مرتّبة حسب تقاطع كل إعلان مع سيرتك الذاتية. مجانًا — بلا ذكاء اصطناعي بعد.',
+  nothing: 'لا توجد وظائف مطابقة. جرّب دورًا آخر أو وسّع المواقع.',
+  matchIt: 'طابقها مع سيرتي الذاتية',
+  opening: 'جارٍ الفتح…',
+  shared: 'مشترك مع سيرتك الذاتية:',
+  via: (publisher: string) => `عبر ${publisher}`,
+  openPosting: 'افتح الإعلان',
+  expired: 'انتهت صلاحية هذه النتيجة. ابحث مرة أخرى.',
 };
 
-/* What filters removed, and why -- so a short list reads as "the filters
-   hid 40" rather than "there are only 6 jobs". */
-function hiddenSummary(hidden: Record<string, number>): string {
+const TEXT = { en, ar };
+type T = typeof en;
+
+function hiddenSummary(hidden: Record<string, number>, t: T): string {
   const parts = Object.entries(hidden)
     .filter(([, n]) => n > 0)
-    .map(([reason, n]) => `${n} ${HIDDEN_LABEL[reason] ?? reason}`);
-  return parts.length ? `Filters hid ${parts.join(', ')}.` : '';
+    .map(([reason, n]) => t.hiddenPart(n, t.hidden[reason] ?? reason));
+  return parts.length ? t.filtersHid(parts.join(t.listSep)) : '';
 }
 
-/* Where the results came from. Without this, a scan with nothing from Google
+/* Where the results came from. Without this, a search with nothing from Google
    looks the same as one that never asked it. */
-function sourceSummary(bySource: Record<string, number>): string {
+function sourceSummary(bySource: Record<string, number>, t: T): string {
   const google = bySource.jsearch ?? 0;
   const boards = Object.entries(bySource)
     .filter(([source]) => source !== 'jsearch')
     .reduce((sum, [, n]) => sum + n, 0);
-  return [
-    boards ? `${boards} from company job boards` : '',
-    google ? `${google} from Google for Jobs (LinkedIn, Bayt, Indeed and others)` : '',
-  ]
+  return [boards ? t.fromBoards(boards) : '', google ? t.fromGoogle(google) : '']
     .filter(Boolean)
     .join(' · ');
 }
 
-function postedLabel(iso: string | null): string {
-  if (!iso) return 'date not stated';
+function postedLabel(iso: string | null, t: T): string {
+  if (!iso) return t.noDate;
   const days = Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000);
-  if (days <= 0) return 'posted today';
-  if (days === 1) return 'posted yesterday';
-  if (days < 14) return `posted ${days} days ago`;
-  if (days < 60) return `posted ${Math.round(days / 7)} weeks ago`;
-  return `posted ${Math.round(days / 30)} months ago`;
+  if (days <= 0) return t.today;
+  if (days === 1) return t.yesterday;
+  if (days < 14) return t.daysAgo(days);
+  if (days < 60) return t.weeksAgo(Math.round(days / 7));
+  return t.monthsAgo(Math.round(days / 30));
 }
 
 /* Level is read from title words, so it is shown as read, not as fact. */
-function metaLine(seniority: string, workMode: string, postedAt: string | null): string {
-  const level =
-    seniority === 'unknown' ? 'level not stated' : `${LEVEL_LABEL[seniority] ?? seniority} (from title)`;
-  const mode = workMode === 'unknown' ? 'arrangement not stated' : workMode;
-  return [level, mode, postedLabel(postedAt)].join(' · ');
+function metaLine(c: ScoutCandidate, t: T): string {
+  const level = c.seniority === 'unknown' ? t.noLevel : (t.level[c.seniority] ?? c.seniority);
+  const mode = c.work_mode === 'unknown' ? t.noMode : (t.mode[c.work_mode] ?? c.work_mode);
+  return [level, mode, postedLabel(c.posted_at, t)].join(' · ');
 }
 
+/* Relative only. The raw cosine similarity is meaningless as an absolute
+   number — 0.085 is a strong match in this corpus — so it is drawn, not
+   printed: it ranks, it does not grade. */
 function Bar({ value, max }: { value: number; max: number }) {
-  /* Relative only. The raw cosine similarity is meaningless as an absolute
-     number — 0.085 is a strong match in this corpus — so showing it as a score
-     would imply a precision that isn't there. It ranks; it doesn't grade. */
   const pct = max > 0 ? Math.round((100 * value) / max) : 0;
   return (
-    <span className="relbar" title={`${pct}% as relevant as the top result`}>
+    <span className="relbar" aria-hidden="true">
       <span style={{ width: `${Math.max(pct, 2)}%` }} />
     </span>
   );
 }
 
-/* A link to one specific job is handled by the Match tab, which reads the
-   posting and checks every requirement against the CV. This tab is for
-   searching; `onMatchJob` sends a user with a link there instead of offering a
-   second, thinner version of the same thing. */
 export default function Scout({
   resumeId,
   onMatchJob,
 }: {
   resumeId: string | null;
-  onMatchJob: () => void;
+  onMatchJob: (job: JobIn) => void;
 }) {
+  const t = useText(TEXT);
   const [titleHint, setTitleHint] = useState('');
   const [locations, setLocations] = useState('saudi, riyadh');
-  const [linkedinOnly, setLinkedinOnly] = useState(false);
-  // On by default: without it only a handful of company boards are searched.
-  const [includeJsearch, setIncludeJsearch] = useState(true);
   const [workMode, setWorkMode] = useState<'any' | 'remote' | 'hybrid' | 'onsite'>('any');
-  const [levels, setLevels] = useState<Set<string>>(new Set());
+  const [level, setLevel] = useState('');
   const [postedWithin, setPostedWithin] = useState<number | null>(null);
-  const [includeUnstated, setIncludeUnstated] = useState(true);
 
   const [found, setFound] = useState<FindResponse | null>(null);
-  const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [scored, setScored] = useState<ScoreResponse | null>(null);
-
-
   const [searching, setSearching] = useState(false);
-  const [scoring, setScoring] = useState(false);
+  const [opening, setOpening] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const topSimilarity = useMemo(
@@ -122,359 +209,187 @@ export default function Scout({
     if (!resumeId) return;
     setError(null);
     setSearching(true);
-    setScored(null);
     try {
-      const result = await findJobs({
-        resumeId,
-        titleHint,
-        locations: locations.split(',').map((s) => s.trim()).filter(Boolean),
-        includeJsearch,
-        linkedinOnly,
-        filters: {
-          workMode,
-          seniority: [...levels],
-          postedWithinDays: postedWithin,
-          includeUnstated,
-        },
-      });
-      setFound(result);
-      // Preselect the shortlist the user would most likely pick anyway.
-      setSelected(new Set(result.candidates.slice(0, DEFAULT_SHORTLIST).map((c) => c.id)));
+      setFound(
+        await findJobs({
+          resumeId,
+          titleHint,
+          locations: locations.split(/[,،]/).map((s) => s.trim()).filter(Boolean),
+          filters: {
+            workMode,
+            seniority: level ? [level] : [],
+            postedWithinDays: postedWithin,
+            includeUnstated: true,
+          },
+        }),
+      );
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Search failed.');
+      setError(err instanceof Error ? err.message : t.searchFailed);
     } finally {
       setSearching(false);
     }
   }
 
-  async function score() {
-    if (!resumeId || selected.size === 0) return;
+  /* The posting's text lives on the server until a job is opened. Fetching it
+     here means the Match tab starts with the real description rather than a
+     title the user would have to paste around. */
+  async function match(candidate: ScoutCandidate) {
+    if (!resumeId) return;
     setError(null);
-    setScoring(true);
+    setOpening(candidate.id);
     try {
-      setScored(await scoreJobs({ resumeId, jobIds: [...selected] }));
+      const job = await getCachedJob(resumeId, candidate.id);
+      onMatchJob({
+        title: job.title,
+        company: job.company,
+        location: job.location,
+        description: job.description,
+        apply_url: job.apply_url,
+        source: job.source,
+      });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Scoring failed.');
+      setError(err instanceof Error ? err.message : t.expired);
     } finally {
-      setScoring(false);
+      setOpening(null);
     }
   }
 
-  function toggleLevel(level: string) {
-    setLevels((prev) => {
-      const next = new Set(prev);
-      if (next.has(level)) next.delete(level);
-      else next.add(level);
-      return next;
-    });
-  }
-
-  function toggle(id: string) {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
-      return next;
-    });
+  function clearFilters() {
+    setWorkMode('any');
+    setLevel('');
+    setPostedWithin(null);
   }
 
   if (!resumeId) {
     return (
       <p className="empty" style={{ marginTop: '2rem' }}>
-        Upload a resume above first — the search ranks jobs against it.
+        {t.uploadFirst}
       </p>
     );
   }
 
+  const filtersOn = workMode !== 'any' || level !== '' || postedWithin !== null;
+
   return (
     <>
-      <p className="note" style={{ marginTop: '2rem' }}>
-        Have a link to one specific job?{' '}
-        <button type="button" className="ledger-more" onClick={onMatchJob}>
-          Match it against your CV
-        </button>{' '}
-        — that tab reads the posting and checks each requirement against your CV.
-      </p>
-
-
-      <form className="form" onSubmit={search} style={{ marginTop: '1rem' }}>
-        <div className="row">
+      <form className="form job-search" onSubmit={search} style={{ marginTop: '2rem' }}>
+        <div className="search-row">
           <label>
-            <span className="label-text">Role you want</span>
+            <span className="label-text">{t.role}</span>
             <input
               type="text"
+              dir="auto"
               value={titleHint}
-              placeholder="Backend Engineer"
+              placeholder={t.rolePlaceholder}
               onChange={(e) => setTitleHint(e.target.value)}
             />
           </label>
           <label>
-            <span className="label-text">Locations — comma separated</span>
+            <span className="label-text">{t.locations}</span>
             <input
               type="text"
+              dir="ltr"
               value={locations}
               placeholder="saudi, riyadh, remote"
               onChange={(e) => setLocations(e.target.value)}
             />
           </label>
+          <button type="submit" disabled={searching}>
+            {t.search}
+          </button>
         </div>
 
-        <div className="row filters">
-          <label>
-            <span className="label-text">Work arrangement</span>
-            <select
-              value={workMode}
-              onChange={(e) => setWorkMode(e.target.value as typeof workMode)}
-            >
-              <option value="any">Any</option>
-              <option value="remote">Remote</option>
-              <option value="hybrid">Hybrid</option>
-              <option value="onsite">On-site</option>
-            </select>
-          </label>
-          <label>
-            <span className="label-text">Posted within</span>
-            <select
-              value={postedWithin ?? ''}
-              onChange={(e) => setPostedWithin(e.target.value ? Number(e.target.value) : null)}
-            >
-              <option value="">Any time</option>
-              <option value="1">24 hours</option>
-              <option value="7">7 days</option>
-              <option value="30">30 days</option>
-            </select>
-          </label>
-        </div>
-
-        <fieldset className="levels">
-          <legend className="label-text">Seniority — read from the job title</legend>
-          {LEVELS.map((level) => (
-            <label className="check-inline" key={level}>
-              <input
-                type="checkbox"
-                checked={levels.has(level)}
-                onChange={() => toggleLevel(level)}
-              />{' '}
-              {LEVEL_LABEL[level]}
-            </label>
-          ))}
-        </fieldset>
-
-        <label className="check">
-          <input
-            type="checkbox"
-            checked={includeUnstated}
-            onChange={(e) => setIncludeUnstated(e.target.checked)}
-          />
-          <span>
-            Keep roles that don&apos;t say
-            <em>
-              Most titles state no level, and many postings give no date or work arrangement.
-              Untick to hide them when a filter is on.
-            </em>
-          </span>
-        </label>
-
-        <div className="checks">
-          <label className="check">
-            <input
-              type="checkbox"
-              checked={includeJsearch}
-              onChange={(e) => setIncludeJsearch(e.target.checked)}
-            />
-            <span>
-              Also search Google for Jobs
-              <em>
-                Reaches LinkedIn, Indeed and Bayt listings. Uses one request from your
-                JSearch quota.
-              </em>
-            </span>
-          </label>
-          {includeJsearch && (
-            <label className="check">
-              <input
-                type="checkbox"
-                checked={linkedinOnly}
-                onChange={(e) => setLinkedinOnly(e.target.checked)}
-              />
-              <span>
-                LinkedIn listings only
-                <em>Filters to roles published on LinkedIn.</em>
-              </span>
-            </label>
+        <div className="filter-row">
+          <span className="label-text">{t.filters}</span>
+          <select
+            value={postedWithin ?? ''}
+            onChange={(e) => setPostedWithin(e.target.value ? Number(e.target.value) : null)}
+          >
+            <option value="">{t.anyTime}</option>
+            <option value="1">{t.day}</option>
+            <option value="7">{t.week}</option>
+            <option value="30">{t.month}</option>
+          </select>
+          <select value={workMode} onChange={(e) => setWorkMode(e.target.value as typeof workMode)}>
+            <option value="any">{t.anyMode}</option>
+            <option value="remote">{t.remote}</option>
+            <option value="hybrid">{t.hybrid}</option>
+            <option value="onsite">{t.onsite}</option>
+          </select>
+          <select value={level} onChange={(e) => setLevel(e.target.value)}>
+            <option value="">{t.anyLevel}</option>
+            {LEVELS.map((l) => (
+              <option key={l} value={l}>
+                {t.level[l]}
+              </option>
+            ))}
+          </select>
+          {filtersOn && (
+            <button type="button" className="linklike" onClick={clearFilters}>
+              {t.clear}
+            </button>
           )}
         </div>
 
         {error && <p className="error">{error}</p>}
-
-        {searching ? (
+        {searching && (
           <div className="working">
             <span className="sweep">
               <i />
             </span>
-            Scanning job boards…
+            {t.searching}
           </div>
-        ) : (
-          <button type="submit">Search — free</button>
         )}
       </form>
 
-      {found && (
+      {found && !searching && (
         <section>
-          <div className="eyebrow">
-            {found.total_found} scanned · {found.candidates.length} shown
-          </div>
-          {sourceSummary(found.by_source) && (
-            <p className="note">{sourceSummary(found.by_source)}</p>
+          <div className="eyebrow">{t.found(found.candidates.length, found.total_found)}</div>
+          {sourceSummary(found.by_source, t) && (
+            <p className="note">{sourceSummary(found.by_source, t)}</p>
           )}
           {(found.notes ?? []).map((note) => (
             <p className="note" key={note}>
               {note}
             </p>
           ))}
-          {hiddenSummary(found.hidden) && <p className="note">{hiddenSummary(found.hidden)}</p>}
-
-          <p className="note" style={{ marginBottom: '1rem' }}>
-            Ranked by overlap with your CV. This step is free and cost nothing to run —
-            the bar shows relevance <em>relative to the top result</em>, not a score.
-            Pick the ones worth a closer look.
-          </p>
+          {hiddenSummary(found.hidden, t) && <p className="note">{hiddenSummary(found.hidden, t)}</p>}
 
           {found.candidates.length === 0 ? (
-            <p className="empty">
-              Nothing in those locations. Try widening them, or drop the location filter.
-            </p>
+            <p className="empty">{t.nothing}</p>
           ) : (
             <>
-              <div className="table-wrap">
-                <table>
-                  <thead>
-                    <tr>
-                      <th style={{ width: '2rem' }} />
-                      <th style={{ width: '6rem' }}>Relevance</th>
-                      <th>Role</th>
-                      <th>Company</th>
-                      <th>Level · arrangement · posted</th>
-                      <th>Shared with your CV</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {found.candidates.map((c: ScoutCandidate) => (
-                      <tr key={c.id} className={selected.has(c.id) ? 'picked' : ''}>
-                        <td>
-                          <input
-                            type="checkbox"
-                            checked={selected.has(c.id)}
-                            onChange={() => toggle(c.id)}
-                            aria-label={`Select ${c.title}`}
-                          />
-                        </td>
-                        <td>
-                          <Bar value={c.similarity} max={topSimilarity} />
-                        </td>
-                        <td>
-                          <a href={c.apply_url} target="_blank" rel="noreferrer noopener">
-                            {c.title}
-                          </a>
-                          {c.publisher && <span className="via">via {c.publisher}</span>}
-                        </td>
-                        <td>
-                          {c.company}
-                          <br />
-                          <span className="q">{c.location}</span>
-                        </td>
-                        <td className="q">{metaLine(c.seniority, c.work_mode, c.posted_at)}</td>
-                        <td className="q">{c.overlap.slice(0, 5).join(', ') || '—'}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-
-              <div className="score-bar">
-                {scoring ? (
-                  <div className="working">
-                    <span className="sweep">
-                      <i />
-                    </span>
-                    Reading {selected.size} job{selected.size === 1 ? '' : 's'} against your CV…
-                  </div>
-                ) : (
-                  <>
-                    <button type="button" onClick={score} disabled={selected.size === 0}>
-                      Score {selected.size} with AI
-                    </button>
-                    <span className="cost-note">
-                      {selected.size === 0
-                        ? 'Select at least one role.'
-                        : `${selected.size} model call${selected.size === 1 ? '' : 's'}.`}
-                    </span>
-                  </>
-                )}
+              <p className="note" style={{ marginBottom: '1rem' }}>{t.ranked}</p>
+              <div className="job-grid">
+                {found.candidates.map((c) => (
+                  <article className="job-card" key={c.id}>
+                    <Bar value={c.similarity} max={topSimilarity} />
+                    <p className="job-company" dir="auto">
+                      {c.company}
+                      {c.publisher && <span className="via">{t.via(c.publisher)}</span>}
+                    </p>
+                    <h3 dir="auto">
+                      <a href={c.apply_url} target="_blank" rel="noreferrer noopener">
+                        {c.title}
+                      </a>
+                    </h3>
+                    <p className="q" dir="auto">{c.location}</p>
+                    <p className="q">{metaLine(c, t)}</p>
+                    {c.overlap.length > 0 && (
+                      <p className="job-overlap" dir="auto">
+                        <span className="label-text">{t.shared}</span>{' '}
+                        {c.overlap.slice(0, 5).join(', ')}
+                      </p>
+                    )}
+                    <div className="actions">
+                      <button type="button" onClick={() => match(c)} disabled={opening !== null}>
+                        {opening === c.id ? t.opening : t.matchIt}
+                      </button>
+                    </div>
+                  </article>
+                ))}
               </div>
             </>
-          )}
-        </section>
-      )}
-
-      {scored && (
-        <section>
-          <div className="eyebrow">
-            {scored.worth_it} worth your time
-          </div>
-          {scored.headline && (
-            <p className="verdict" style={{ marginBottom: '1.5rem' }}>
-              {scored.headline}
-            </p>
-          )}
-          {scored.lines.map((line, i) => (
-            <article className="finding" key={`${line.title}-${i}`}>
-              <div className="finding-head">
-                <h3>
-                  <a href={line.url} target="_blank" rel="noreferrer noopener">
-                    {line.title}
-                  </a>
-                  {' — '}
-                  {line.company}
-                  {line.location ? `, ${line.location}` : ''}
-                </h3>
-                <span className="match-score">{line.score.toFixed(0)}</span>
-              </div>
-              <p className="fix">{line.why}</p>
-              {line.gap && (
-                <p className="fix" style={{ opacity: 0.85 }}>
-                  {line.gap}
-                </p>
-              )}
-              <p className="q">{metaLine(line.seniority, line.work_mode, line.posted_at)}</p>
-              {line.matched.length > 0 && (
-                <div className="chips">
-                  <span className="label-text">Top matches</span>
-                  {line.matched.slice(0, 3).map((m) => (
-                    <span className="pill present" key={m}>
-                      {m}
-                    </span>
-                  ))}
-                </div>
-              )}
-              {line.missing.length > 0 && (
-                <div className="chips">
-                  <span className="label-text">Top missing</span>
-                  {line.missing.slice(0, 3).map((m) => (
-                    <span className="pill missing" key={m}>
-                      {m}
-                    </span>
-                  ))}
-                </div>
-              )}
-              {line.id && (
-                <TailorButton key={line.id} resumeId={resumeId} target={{ scoutJobId: line.id }} />
-              )}
-            </article>
-          ))}
-          {scored.failures > 0 && (
-            <p className="note">
-              {scored.failures} role{scored.failures === 1 ? '' : 's'} could not be scored.
-            </p>
           )}
         </section>
       )}

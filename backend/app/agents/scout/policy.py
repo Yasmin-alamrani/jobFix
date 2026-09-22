@@ -72,6 +72,10 @@ WALL_MARKERS = (
     "captcha", "recaptcha", "hcaptcha", "cf-challenge", "are you a robot",
     "verify you are human", "unusual traffic", "access denied",
     "sign in to continue", "authwall", "please log in to continue",
+    # Cloudflare's interstitial, by its text and by the token it puts in the
+    # URL. Reading it as a page wastes a browser load and a model call on a
+    # challenge that will never resolve for us.
+    "just a moment", "__cf_chl", "checking your browser", "enable javascript and cookies",
 )
 
 

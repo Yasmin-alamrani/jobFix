@@ -28,6 +28,8 @@ import logging
 from dataclasses import dataclass
 from types import TracebackType
 
+from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
+
 from .policy import USER_AGENT, Policy, PolicyViolation, WallEncountered, looks_like_a_wall
 
 log = logging.getLogger(__name__)
@@ -41,7 +43,8 @@ BLOCKED_RESOURCES = frozenset({"image", "media", "font", "stylesheet"})
 # images are allowed through for that read only.
 VISUAL_RESOURCES = frozenset({"media"})
 
-DEFAULT_TIMEOUT_MS = 25_000
+# A posting that has not rendered in fifteen seconds is not going to.
+DEFAULT_TIMEOUT_MS = 15_000
 
 
 @dataclass
@@ -166,11 +169,16 @@ class ReadOnlyBrowser:
         before = self._blocked_writes
         page = self._context.new_page()
         try:
-            page.goto(url, wait_until="domcontentloaded")
+            try:
+                page.goto(url, wait_until="domcontentloaded")
+            except PlaywrightTimeoutError:
+                # A slow page is not a dead one: whatever has already rendered
+                # is usually the posting, and the rest is advertising.
+                log.info("%s did not finish loading in time; reading what it has", url)
             title = page.title() or ""
             text = page.inner_text("body") or ""
 
-            marker = looks_like_a_wall(text, title=title)
+            marker = looks_like_a_wall(f"{page.url}\n{text}", title=title)
             if marker:
                 raise WallEncountered(
                     f"{url} is behind a wall ({marker!r}). Stopping -- this agent "

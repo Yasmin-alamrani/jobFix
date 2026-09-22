@@ -13,11 +13,111 @@ import {
   uploadResume,
   uploadResumeText,
 } from './api';
+import { useLang, useSetLang, useText } from './i18n';
 import { useTheme } from './theme';
 import type { AnalysisResult, Industry } from './types';
 import './styles.css';
 
 type Mode = 'cv' | 'audit' | 'find';
+
+const en = {
+  title: 'Resume Analyzer',
+  apiDown: 'Cannot reach the API. Is the backend running on port 8000?',
+  pasteShort: 'Paste the whole CV — that is too short to read.',
+  readingCv: 'Reading your CV',
+  pastedCv: 'Pasted CV',
+  readTextFailed: 'Could not read that text.',
+  confirmDelete:
+    'Delete this CV and everything made from it — analyses, tailored versions and ' +
+    'saved figures? This cannot be undone.',
+  deleting: 'Deleting',
+  deleteFailed: 'Could not delete that CV.',
+  uploading: 'Uploading your CV',
+  uploadFailed: 'Upload failed.',
+  matching: 'Reading the document and matching against the posting',
+  failed: 'Something went wrong.',
+  pageUnreadable:
+    'That page could not be read. Paste the job description into the box below instead.',
+  toLight: 'Switch to light mode',
+  toDark: 'Switch to dark mode',
+  light: 'Light mode',
+  dark: 'Dark mode',
+  otherLang: 'العربية',
+  otherLangCode: 'ar',
+  otherLangLabel: 'اعرض الصفحة بالعربية',
+  analyzing: 'Analyzing',
+  differentCv: 'Use a different CV',
+  deleteCv: 'Delete CV',
+  tabCv: 'Read my CV',
+  tabAudit: 'Match against one job',
+  tabFind: 'Find jobs',
+  postingLink: 'Job posting link — optional',
+  postingNote:
+    'Reads the posting into the form below. Any job link: if the page itself cannot be read — a ' +
+    'login wall, a bot check, a site that forbids automated reading — the posting is looked up ' +
+    'on Google for Jobs instead. Failing that, paste the description.',
+  readingPage: 'Reading that page…',
+  readPosting: 'Read this posting',
+  targetRole: 'Target role',
+  rolePlaceholder: 'Senior Backend Engineer',
+  company: 'Company',
+  companyPlaceholder: 'Tamara',
+  industry: 'Industry',
+  jd: 'Job description and qualifications',
+  jdPlaceholder: 'Paste the full posting, including the required and preferred qualifications.',
+  jdShort: 'Paste the full posting. A short snippet doesn’t give enough to match against.',
+  check: 'Check the match',
+};
+
+const ar: typeof en = {
+  title: 'محلل السيرة الذاتية',
+  apiDown: 'تعذّر الوصول إلى الخادم. هل الواجهة الخلفية تعمل على المنفذ 8000؟',
+  pasteShort: 'الصق السيرة الذاتية كاملة — هذا النص أقصر من أن يُقرأ.',
+  readingCv: 'جارٍ قراءة سيرتك الذاتية',
+  pastedCv: 'سيرة ذاتية ملصوقة',
+  readTextFailed: 'تعذّرت قراءة هذا النص.',
+  confirmDelete:
+    'هل تريد حذف هذه السيرة الذاتية وكل ما نتج عنها — التحليلات والنسخ المخصّصة والأرقام ' +
+    'المحفوظة؟ لا يمكن التراجع عن ذلك.',
+  deleting: 'جارٍ الحذف',
+  deleteFailed: 'تعذّر حذف هذه السيرة الذاتية.',
+  uploading: 'جارٍ رفع سيرتك الذاتية',
+  uploadFailed: 'فشل الرفع.',
+  matching: 'جارٍ قراءة المستند ومطابقته مع الإعلان',
+  failed: 'حدث خطأ ما.',
+  pageUnreadable: 'تعذّرت قراءة هذه الصفحة. الصق الوصف الوظيفي في المربع أدناه بدلًا من ذلك.',
+  toLight: 'التبديل إلى الوضع الفاتح',
+  toDark: 'التبديل إلى الوضع الداكن',
+  light: 'الوضع الفاتح',
+  dark: 'الوضع الداكن',
+  otherLang: 'English',
+  otherLangCode: 'en',
+  otherLangLabel: 'Show the page in English',
+  analyzing: 'قيد التحليل',
+  differentCv: 'استخدم سيرة ذاتية أخرى',
+  deleteCv: 'حذف السيرة الذاتية',
+  tabCv: 'اقرأ سيرتي الذاتية',
+  tabAudit: 'طابقها مع وظيفة',
+  tabFind: 'ابحث عن وظائف',
+  postingLink: 'رابط الإعلان الوظيفي — اختياري',
+  postingNote:
+    'يقرأ الإعلان ويملأ النموذج أدناه. أي رابط وظيفة: إذا تعذّرت قراءة الصفحة نفسها — جدار تسجيل ' +
+    'دخول أو فحص للروبوتات أو موقع يمنع القراءة الآلية — يُبحث عن الإعلان في Google للوظائف. ' +
+    'وإن لم يُعثر عليه، فالصق الوصف.',
+  readingPage: 'جارٍ قراءة الصفحة…',
+  readPosting: 'اقرأ هذا الإعلان',
+  targetRole: 'الدور المستهدف',
+  rolePlaceholder: 'مهندس برمجيات أول',
+  company: 'الشركة',
+  companyPlaceholder: 'تمارا',
+  industry: 'القطاع',
+  jd: 'الوصف الوظيفي والمؤهلات',
+  jdPlaceholder: 'الصق الإعلان كاملًا، بما في ذلك المؤهلات المطلوبة والمفضّلة.',
+  jdShort: 'الصق الإعلان كاملًا. المقتطف القصير لا يكفي للمطابقة.',
+  check: 'تحقّق من التطابق',
+};
+
+const TEXT = { en, ar };
 
 function Sun() {
   return (
@@ -37,6 +137,9 @@ function Moon() {
 }
 
 export default function App() {
+  const t = useText(TEXT);
+  const lang = useLang();
+  const setLang = useSetLang();
   const [theme, toggleTheme] = useTheme();
   const [mode, setMode] = useState<Mode>('cv');
   const [industries, setIndustries] = useState<Industry[]>([]);
@@ -61,10 +164,15 @@ export default function App() {
   const [result, setResult] = useState<AnalysisResult | null>(null);
 
   useEffect(() => {
+    document.title = t.title;
+  }, [t.title]);
+
+  // Refetched per language: the industry names come back translated.
+  useEffect(() => {
     listIndustries()
       .then(setIndustries)
-      .catch(() => setError('Cannot reach the API. Is the backend running on port 8000?'));
-  }, []);
+      .catch(() => setError(TEXT[lang].apiDown));
+  }, [lang]);
 
   function clearDerived() {
     setResumeId(null);
@@ -74,18 +182,18 @@ export default function App() {
 
   async function onPaste(text: string) {
     if (text.trim().length < 100) {
-      setError('Paste the whole CV \u2014 that is too short to read.');
+      setError(t.pasteShort);
       return;
     }
     clearDerived();
     try {
-      setWorking('Reading your CV');
+      setWorking(t.readingCv);
       const uploaded = await uploadResumeText(text);
       setResumeId(uploaded.id);
-      setResumeName('Pasted CV');
+      setResumeName(t.pastedCv);
       setMode('cv');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not read that text.');
+      setError(err instanceof Error ? err.message : t.readTextFailed);
     } finally {
       setWorking(null);
     }
@@ -95,17 +203,14 @@ export default function App() {
      derived from it, not just the reference held here. */
   async function onDelete() {
     if (!resumeId) return;
-    if (!window.confirm(
-      'Delete this CV and everything made from it \u2014 analyses, tailored versions and ' +
-      'saved figures? This cannot be undone.',
-    )) return;
+    if (!window.confirm(t.confirmDelete)) return;
     try {
-      setWorking('Deleting');
+      setWorking(t.deleting);
       await deleteResume(resumeId);
       setResumeName('');
       clearDerived();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not delete that CV.');
+      setError(err instanceof Error ? err.message : t.deleteFailed);
     } finally {
       setWorking(null);
     }
@@ -121,13 +226,13 @@ export default function App() {
   async function onFile(chosen: File) {
     clearDerived();          // a new file invalidates the old analysis
     try {
-      setWorking('Uploading your CV');
+      setWorking(t.uploading);
       const uploaded = await uploadResume(chosen);
       setResumeId(uploaded.id);
       setResumeName(uploaded.filename);
       setMode('cv');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Upload failed.');
+      setError(err instanceof Error ? err.message : t.uploadFailed);
     } finally {
       setWorking(null);
     }
@@ -139,7 +244,7 @@ export default function App() {
     setError(null);
     setResult(null);
     try {
-      setWorking('Reading the document and matching against the posting');
+      setWorking(t.matching);
       const analysis = await createAnalysis({
         resumeId,
         jobDescription,
@@ -149,7 +254,7 @@ export default function App() {
       setResult(analysis.result);
       setRunId((n) => n + 1);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Something went wrong.');
+      setError(err instanceof Error ? err.message : t.failed);
     } finally {
       setWorking(null);
     }
@@ -169,11 +274,7 @@ export default function App() {
       setJobDescription(job.description);
       setResult(null);
     } catch (err) {
-      setReadError(
-        err instanceof Error
-          ? err.message
-          : 'That page could not be read. Paste the job description into the box below instead.',
-      );
+      setReadError(err instanceof Error ? err.message : t.pageUnreadable);
     } finally {
       setReading(false);
     }
@@ -186,17 +287,28 @@ export default function App() {
       <header className="topbar">
         <div className="topbar-inner">
           <span className="brand">
-            <Mark /> Resume Analyzer
+            <Mark /> {t.title}
           </span>
-          <button
-            type="button"
-            className="theme-toggle"
-            onClick={toggleTheme}
-            aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-          >
-            {theme === 'dark' ? <Sun /> : <Moon />}
-            <span>{theme === 'dark' ? 'Light mode' : 'Dark mode'}</span>
-          </button>
+          <div className="topbar-actions">
+            <button
+              type="button"
+              className="theme-toggle"
+              lang={t.otherLangCode}
+              onClick={() => setLang(lang === 'ar' ? 'en' : 'ar')}
+              aria-label={t.otherLangLabel}
+            >
+              <span>{t.otherLang}</span>
+            </button>
+            <button
+              type="button"
+              className="theme-toggle"
+              onClick={toggleTheme}
+              aria-label={theme === 'dark' ? t.toLight : t.toDark}
+            >
+              {theme === 'dark' ? <Sun /> : <Moon />}
+              <span>{theme === 'dark' ? t.light : t.dark}</span>
+            </button>
+          </div>
         </div>
       </header>
 
@@ -208,16 +320,16 @@ export default function App() {
             <div className="cv-name">
               <Mark />
               <span>
-                <span className="label-text">Analyzing</span>
-                <strong>{resumeName}</strong>
+                <span className="label-text">{t.analyzing}</span>
+                <strong dir="auto">{resumeName}</strong>
               </span>
             </div>
             <div className="cv-actions">
               <button type="button" onClick={switchCv} disabled={!!working}>
-                Use a different CV
+                {t.differentCv}
               </button>
               <button type="button" className="danger" onClick={onDelete} disabled={!!working}>
-                Delete CV
+                {t.deleteCv}
               </button>
             </div>
           </div>
@@ -230,7 +342,7 @@ export default function App() {
               aria-selected={mode === 'cv'}
               onClick={() => setMode('cv')}
             >
-              Read my CV
+              {t.tabCv}
             </button>
             <button
               type="button"
@@ -238,7 +350,7 @@ export default function App() {
               aria-selected={mode === 'audit'}
               onClick={() => setMode('audit')}
             >
-              Match against one job
+              {t.tabAudit}
             </button>
             <button
               type="button"
@@ -246,17 +358,19 @@ export default function App() {
               aria-selected={mode === 'find'}
               onClick={() => setMode('find')}
             >
-              Find matching jobs
+              {t.tabFind}
             </button>
           </div>
 
           {mode === 'cv' ? (
-            <Profile key={resumeId ?? 'none'} resumeId={resumeId} />
+            /* Keyed on the language too: switching remounts the tab, which
+               fetches the review and fields again in the new language. */
+            <Profile key={`${resumeId ?? 'none'}:${lang}`} resumeId={resumeId} />
           ) : mode === 'audit' ? (
             <>
               <form className="form paste-panel" onSubmit={readPosting} style={{ marginTop: '2rem' }}>
                 <label>
-                  <span className="label-text">Job posting link — optional</span>
+                  <span className="label-text">{t.postingLink}</span>
                   <input
                     type="url"
                     value={jobUrl}
@@ -264,22 +378,18 @@ export default function App() {
                     onChange={(e) => setJobUrl(e.target.value)}
                   />
                 </label>
-                <p className="note">
-                  Reads the posting into the form below. If the page can&apos;t be read — a login
-                  wall, a bot check, a site that forbids automated access — paste the description
-                  instead.
-                </p>
+                <p className="note">{t.postingNote}</p>
                 {readError && <p className="error">{readError}</p>}
                 {reading ? (
                   <div className="working">
                     <span className="sweep">
                       <i />
                     </span>
-                    Reading that page…
+                    {t.readingPage}
                   </div>
                 ) : (
                   <button type="submit" disabled={!jobUrl.trim()}>
-                    Read this posting
+                    {t.readPosting}
                   </button>
                 )}
               </form>
@@ -287,25 +397,27 @@ export default function App() {
               <form className="form" onSubmit={runAudit} style={{ marginTop: '1.5rem' }}>
                 <div className="row">
                   <label>
-                    <span className="label-text">Target role</span>
+                    <span className="label-text">{t.targetRole}</span>
                     <input
                       type="text"
+                      dir="auto"
                       value={jobTitle}
-                      placeholder="Senior Backend Engineer"
+                      placeholder={t.rolePlaceholder}
                       onChange={(e) => setJobTitle(e.target.value)}
                     />
                   </label>
                   <label>
-                    <span className="label-text">Company</span>
+                    <span className="label-text">{t.company}</span>
                     <input
                       type="text"
+                      dir="auto"
                       value={company}
-                      placeholder="Tamara"
+                      placeholder={t.companyPlaceholder}
                       onChange={(e) => setCompany(e.target.value)}
                     />
                   </label>
                   <label>
-                    <span className="label-text">Industry</span>
+                    <span className="label-text">{t.industry}</span>
                     <select value={industry} onChange={(e) => setIndustry(e.target.value)}>
                       {industries.map((i) => (
                         <option key={i.key} value={i.key}>
@@ -317,18 +429,17 @@ export default function App() {
                 </div>
 
                 <label>
-                  <span className="label-text">Job description and qualifications</span>
+                  <span className="label-text">{t.jd}</span>
                   <textarea
+                    dir="auto"
                     value={jobDescription}
-                    placeholder="Paste the full posting, including the required and preferred qualifications."
+                    placeholder={t.jdPlaceholder}
                     onChange={(e) => setJobDescription(e.target.value)}
                   />
                 </label>
 
                 {jobDescription.trim().length > 0 && jobDescription.trim().length < 50 && (
-                  <p className="note">
-                    Paste the full posting. A short snippet doesn&apos;t give enough to match against.
-                  </p>
+                  <p className="note">{t.jdShort}</p>
                 )}
 
                 {error && <p className="error">{error}</p>}
@@ -342,7 +453,7 @@ export default function App() {
                   </div>
                 ) : (
                   <button type="submit" disabled={!auditReady}>
-                    Check the match
+                    {t.check}
                   </button>
                 )}
               </form>
@@ -375,7 +486,20 @@ export default function App() {
               )}
             </>
           ) : (
-            <Scout resumeId={resumeId} onMatchJob={() => setMode('audit')} />
+            <Scout
+              resumeId={resumeId}
+              onMatchJob={(job) => {
+                /* A search result opens in the Match tab with the posting
+                   already in it: the same analysis, nothing to copy across. */
+                setJobTitle(job.title);
+                setCompany(job.company);
+                setJobDescription(job.description);
+                setJobUrl(job.apply_url ?? '');
+                setResult(null);
+                setError(null);
+                setMode('audit');
+              }}
+            />
           )}
         </main>
       )}

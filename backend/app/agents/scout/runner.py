@@ -23,6 +23,12 @@ from .prefilter import rank
 log = logging.getLogger(__name__)
 
 
+# Pages of aggregator results per search. One page is ten roles, which is
+# too few to show a range of employers; each page costs one request of the
+# 200 a month the free plan allows.
+JSEARCH_PAGES = 2
+
+
 @dataclass
 class ScoutRequest:
     resume_text: str
@@ -76,9 +82,9 @@ def collect(
         try:
             client = JSearch(jsearch_key)
             found = (
-                client.linkedin_only(query)
+                client.linkedin_only(query, pages=JSEARCH_PAGES)
                 if request.linkedin_only
-                else client.search(query)
+                else client.search(query, pages=JSEARCH_PAGES)
             )
             log.info("tier 1: %s jobs from Google for Jobs", len(found))
             jobs += found
@@ -92,11 +98,18 @@ def collect(
             notes.append(f"Google for Jobs could not be searched: {exc}")
 
     # Deduplicate across sources: the same role often appears on a company's own
-    # board and again through the aggregator.
-    seen: dict[str, JobPosting] = {}
+    # board and again through the aggregator -- and aggregators repeat it under
+    # slightly different titles and places, which the exact key cannot see. So a
+    # second key collapses one employer's near-identical titles too.
+    seen: set[str] = set()
+    out: list[JobPosting] = []
     for job in jobs:
-        seen.setdefault(job.dedupe_key, job)
-    return list(seen.values())
+        rough = " ".join(f"{job.company} {job.title}".lower().split())[:48]
+        if job.dedupe_key in seen or rough in seen:
+            continue
+        seen.update({job.dedupe_key, rough})
+        out.append(job)
+    return out
 
 
 def run(
