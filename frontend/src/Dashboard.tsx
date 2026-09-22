@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { arCount, useText } from './i18n';
+import MatchRing from './MatchRing';
 import type {
   AnalysisResult,
   Deduction,
@@ -348,9 +349,12 @@ export default function Dashboard({ result }: { result: AnalysisResult }) {
   const facts = result.parse_facts as Record<string, unknown>;
   return (
     <>
-      <section>
-        <div className="eyebrow">{t.howReached}</div>
-        <Ledger result={result} />
+      <section className="score-head">
+        <MatchRing score={result.overall_score} subScores={result.sub_scores} />
+        <div className="score-head-main">
+          <div className="eyebrow">{t.howReached}</div>
+          <Ledger result={result} />
+        </div>
       </section>
 
       <section>

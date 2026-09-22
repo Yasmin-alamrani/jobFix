@@ -75,6 +75,9 @@ export interface ScoutCandidate {
   company: string;
   location: string;
   similarity: number;
+  /* Share of this posting's wording the CV carries, 0..1. Unlike `similarity`
+     -- a cosine that only ranks -- this one can be shown as a number. */
+  coverage: number;
   overlap: string[];
   apply_url: string;
   source: string;

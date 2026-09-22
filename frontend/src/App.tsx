@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import Dashboard from './Dashboard';
 import Landing, { Mark } from './Landing';
+import Matching from './Matching';
 import Profile from './Profile';
 import Scout from './Scout';
 import Targeting from './Targeting';
@@ -21,7 +22,7 @@ import './styles.css';
 type Mode = 'cv' | 'audit' | 'find';
 
 const en = {
-  title: 'Resume Analyzer',
+  title: 'jobFix',
   apiDown: 'Cannot reach the API. Is the backend running on port 8000?',
   pasteShort: 'Paste the whole CV — that is too short to read.',
   readingCv: 'Reading your CV',
@@ -70,7 +71,7 @@ const en = {
 };
 
 const ar: typeof en = {
-  title: 'محلل السيرة الذاتية',
+  title: 'jobFix',
   apiDown: 'تعذّر الوصول إلى الخادم. هل الواجهة الخلفية تعمل على المنفذ 8000؟',
   pasteShort: 'الصق السيرة الذاتية كاملة — هذا النص أقصر من أن يُقرأ.',
   readingCv: 'جارٍ قراءة سيرتك الذاتية',
@@ -445,12 +446,19 @@ export default function App() {
                 {error && <p className="error">{error}</p>}
 
                 {working ? (
-                  <div className="working">
-                    <span className="sweep">
-                      <i />
-                    </span>
-                    {working}…
-                  </div>
+                  /* The match is the long wait and the one with a payoff, so it
+                     gets the full animation; deleting and uploading keep the
+                     one-line sweep. */
+                  working === t.matching ? (
+                    <Matching label={working} />
+                  ) : (
+                    <div className="working">
+                      <span className="sweep">
+                        <i />
+                      </span>
+                      {working}…
+                    </div>
+                  )
                 ) : (
                   <button type="submit" disabled={!auditReady}>
                     {t.check}

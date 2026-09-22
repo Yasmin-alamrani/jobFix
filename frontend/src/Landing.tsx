@@ -11,7 +11,7 @@ const MIN_PASTE = 100;
 const en = {
   badType: 'Upload a PDF or a Word (.docx) file.',
   tooBig: 'That file is over 15 MB. Export a smaller PDF and try again.',
-  kicker: 'Resume Analyzer',
+  kicker: 'jobFix',
   heading: 'Will your CV get past the first screen?',
   lede:
     'Upload your CV to see how an applicant tracking system reads it, how well it fits the ' +
@@ -52,7 +52,7 @@ const en = {
 const ar: typeof en = {
   badType: 'ارفع ملف PDF أو Word ‏(.docx).',
   tooBig: 'حجم هذا الملف يتجاوز 15 ميغابايت. صدّر ملف PDF أصغر وحاول مجددًا.',
-  kicker: 'محلل السيرة الذاتية',
+  kicker: 'jobFix',
   heading: 'هل تجتاز سيرتك الذاتية الفرز الأول؟',
   lede:
     'ارفع سيرتك الذاتية لترى كيف يقرؤها نظام تتبّع المتقدمين، ومدى ملاءمتها للوظائف التي ' +
@@ -99,20 +99,31 @@ function problemWith(file: File, t: typeof en): string | null {
   return null;
 }
 
+/* The jobFix mark: an eight-pointed Maltese star, traced from the icon.
+   Four arms on the axes, each flaring to two points 26.5 degrees off its
+   axis, with a notch cut back to 7.4 of the 15-unit radius between them and
+   the arms meeting only at the centre.
+
+   Each arm is two triangles rather than one shape, so the fold down its
+   middle catches the light the way the original does. The shading is two
+   opacities of one colour rather than two colours: `--accent` is already
+   light-on-dark and dark-on-light, so the mark keeps its contrast in both
+   themes, which a fixed navy would not. */
 export function Mark() {
   return (
     <svg viewBox="0 0 32 32" aria-hidden="true">
-      <rect x="3" y="2" width="22" height="27" rx="6" fill="var(--accent)" />
-      <path d="M9 10h10M9 15h7M9 20h5" stroke="var(--card)" strokeWidth="2.2" strokeLinecap="round" />
-      <circle cx="23.5" cy="23.5" r="6.5" fill="var(--go)" stroke="var(--card)" strokeWidth="2" />
-      <path
-        d="M20.8 23.6l1.9 1.9 3.4-3.6"
-        stroke="var(--go-ink)"
-        strokeWidth="1.9"
-        fill="none"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
+      <g fill="var(--accent)">
+        <path d="M16 16 L29.42 9.31 L23.38 16 Z" />
+        <path d="M16 16 L22.69 29.42 L16 23.38 Z" />
+        <path d="M16 16 L2.58 22.69 L8.62 16 Z" />
+        <path d="M16 16 L9.31 2.58 L16 8.62 Z" />
+      </g>
+      <g fill="var(--accent)" opacity="0.62">
+        <path d="M16 16 L23.38 16 L29.42 22.69 Z" />
+        <path d="M16 16 L16 23.38 L9.31 29.42 Z" />
+        <path d="M16 16 L8.62 16 L2.58 9.31 Z" />
+        <path d="M16 16 L16 8.62 L22.69 2.58 Z" />
+      </g>
     </svg>
   );
 }

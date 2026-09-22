@@ -7,7 +7,7 @@
    type wherever text is quoted verbatim from the document under examination.
 --------------------------------------------------------------------------- */
 
-@import url('https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800&family=Public+Sans:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;500;700&family=Tajawal:wght@400;500;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;500;700&family=Tajawal:wght@400;500;700;800&display=swap');
 
 :root {
   --ink:        #12161c;
@@ -17,25 +17,43 @@
   --card:       #ffffff;
   --rule:       #dde3ea;
 
-  --blueprint:  #5b3fd0;
+  /* One violet ramp. The chrome, the glow behind the hero and the match
+     ring all draw from it, so the purple stays the same purple throughout. */
+  --violet-300: #c4b5fd;
+  --violet-400: #a78bfa;
+  --violet-500: #8b5cf6;
+  --violet-600: #7c3aed;
+  --violet-700: #6d28d9;
+  --mint:       #34d399;
+  --sky:        #22d3ee;
+  --amber:      #fbbf24;
+  --coral:      #fb7185;
+
+  --blueprint:  #6d28d9;
   --earned:     #1f6f4a;
   --critical:   #c2321f;
   --major:      #b07103;
   --minor:      #6b7484;
 
   /* Landing page and chrome */
-  --accent:      #6a4fd6;
-  --accent-soft: rgba(106, 79, 214, 0.10);
-  --go:          #6b46e5;
-  --go-hover:    #5933d2;
+  --accent:      #7c3aed;
+  --accent-soft: rgba(124, 58, 237, 0.10);
+  --go:          #7c3aed;
+  --go-hover:    #6d28d9;
   --go-ink:      #ffffff;
-  --tint:        #f3f0fc;
+  --tint:        #f6f3ff;
+  /* The glow behind the hero, and the dark panel the match ring sits on --
+     that panel keeps its own colours in both themes. */
+  --glow-core:   rgba(124, 58, 237, 0.20);
+  --glow-mid:    rgba(124, 58, 237, 0.06);
+  --panel:       #100c1f;
+  --panel-2:     #241a4d;
   --glass:       rgba(255, 255, 255, 0.74);
   --lift:        0 22px 60px -24px rgba(28, 38, 70, 0.30);
   --round:       14px;
 
-  --display: 'Archivo', system-ui, sans-serif;
-  --body:    'Public Sans', system-ui, sans-serif;
+  --display: 'Outfit', system-ui, sans-serif;
+  --body:    'Plus Jakarta Sans', system-ui, sans-serif;
   --mono:    'JetBrains Mono', ui-monospace, monospace;
 
   --gap: 1.5rem;
@@ -52,17 +70,21 @@
     --paper:     #0e1116;
     --card:      #161b22;
     --rule:      #262d38;
-    --blueprint: #a893ff;
+    --blueprint: #b9a4ff;
     --earned:    #4bbd85;
     --critical:  #f0705c;
     --major:     #e0a53c;
     --minor:     #7f8a99;
-    --accent:      #a893ff;
-    --accent-soft: rgba(168, 147, 255, 0.14);
-    --go:          #9d85ff;
-    --go-hover:    #b19eff;
-    --go-ink:      #140d2b;
-    --tint:        #13111c;
+    --accent:      #b9a4ff;
+    --accent-soft: rgba(167, 139, 250, 0.16);
+    --go:          #8b5cf6;
+    --go-hover:    #a78bfa;
+    --go-ink:      #ffffff;
+    --tint:        #0f0d1a;
+    --glow-core:   rgba(139, 92, 246, 0.34);
+    --glow-mid:    rgba(109, 40, 217, 0.12);
+    --panel:       #0b0912;
+    --panel-2:     #1c1442;
     --glass:       rgba(22, 27, 34, 0.78);
     --lift:        0 22px 60px -24px rgba(0, 0, 0, 0.7);
   }
@@ -74,17 +96,21 @@
     --paper:     #0e1116;
     --card:      #161b22;
     --rule:      #262d38;
-    --blueprint: #a893ff;
+    --blueprint: #b9a4ff;
     --earned:    #4bbd85;
     --critical:  #f0705c;
     --major:     #e0a53c;
     --minor:     #7f8a99;
-    --accent:      #a893ff;
-    --accent-soft: rgba(168, 147, 255, 0.14);
-    --go:          #9d85ff;
-    --go-hover:    #b19eff;
-    --go-ink:      #140d2b;
-    --tint:        #13111c;
+    --accent:      #b9a4ff;
+    --accent-soft: rgba(167, 139, 250, 0.16);
+    --go:          #8b5cf6;
+    --go-hover:    #a78bfa;
+    --go-ink:      #ffffff;
+    --tint:        #0f0d1a;
+    --glow-core:   rgba(139, 92, 246, 0.34);
+    --glow-mid:    rgba(109, 40, 217, 0.12);
+    --panel:       #0b0912;
+    --panel-2:     #1c1442;
     --glass:       rgba(22, 27, 34, 0.78);
     --lift:        0 22px 60px -24px rgba(0, 0, 0, 0.7);
 }
@@ -410,20 +436,6 @@ td.q { font-family: var(--mono); font-size: 0.75rem; color: var(--ink-3); }
   margin-top: 0.125rem;
 }
 
-/* --- Relative relevance bar ----------------------------------------------
-   Deliberately unlabelled. The underlying cosine similarity has no meaningful
-   absolute scale, so printing a number would imply precision it does not have.
-   It ranks; it does not grade.                                              */
-.relbar {
-  display: block;
-  width: 100%;
-  height: 5px;
-  background: var(--rule);
-  border-radius: 99px;
-  overflow: hidden;
-}
-.relbar > span { display: block; height: 100%; background: var(--blueprint); border-radius: 99px; }
-
 tr.picked { background: color-mix(in srgb, var(--blueprint) 5%, transparent); }
 td a { color: var(--ink); text-decoration-color: var(--rule); text-underline-offset: 2px; }
 td a:hover { text-decoration-color: var(--blueprint); }
@@ -732,28 +744,74 @@ button.theme-toggle:hover:not(:disabled) { background: var(--card); color: var(-
 /* One soft, flat colour behind the page. It is a theme token, so dark mode gets
    a quiet purple-tinted dark rather than a pastel. */
 
-.landing { min-height: calc(100vh - 58px); background: var(--tint); }
+.landing {
+  position: relative;
+  min-height: calc(100vh - 58px);
+  background: var(--tint);
+  overflow: hidden;            /* keeps the glow from widening the page */
+}
+/* The glow is one soft radial behind the headline. It carries the brand
+   colour at a size no border or fill could, and it sits under everything:
+   .landing-inner already raises the content above it. */
+.landing::before {
+  content: '';
+  position: absolute;
+  z-index: 0;
+  top: -22rem;
+  left: 50%;
+  translate: -50% 0;
+  width: min(1100px, 135%);
+  aspect-ratio: 1;
+  pointer-events: none;
+  background: radial-gradient(
+    circle at 50% 50%,
+    var(--glow-core) 0%,
+    var(--glow-mid) 38%,
+    transparent 68%
+  );
+}
 .landing-inner { position: relative; z-index: 1; max-width: 1200px; margin: 0 auto; padding: 4.5rem 1.5rem 5rem; }
 
 /* One centred column: the headline, then the drop zone -- the one thing to do. */
 .hero { max-width: 46rem; margin: 0 auto; text-align: center; }
 @media (max-width: 640px) { .landing-inner { padding-top: 3rem; } }
 .kicker {
+  display: inline-flex;
+  align-items: center;
   font-family: var(--display);
-  font-weight: 700;
+  font-weight: 600;
   font-size: 0.8125rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  /* No uppercasing: the badge carries the product name, and jobFix is spelt
+     the way it is spelt. */
+  letter-spacing: 0.02em;
   color: var(--accent);
-  margin: 0 0 1rem;
+  margin: 0 0 1.25rem;
+  padding: 0.35rem 0.9rem;
+  border: 1px solid color-mix(in srgb, var(--accent) 32%, transparent);
+  border-radius: 999px;
+  background: var(--accent-soft);
 }
 .hero h1 {
   font-family: var(--display);
-  font-weight: 800;
-  font-size: clamp(2.4rem, 5.2vw, 4rem);
-  line-height: 1.04;
-  letter-spacing: -0.025em;
+  font-weight: 700;
+  font-size: clamp(2.5rem, 5.4vw, 4.25rem);
+  line-height: 1.02;
+  letter-spacing: -0.035em;
   margin: 0;
+  /* Top-to-bottom fade: the headline settles into the page instead of
+     stopping dead. Falls back to plain ink where background-clip is not
+     honoured -- forced-colors modes among them. */
+  background: linear-gradient(
+    180deg,
+    var(--ink) 30%,
+    color-mix(in srgb, var(--ink) 72%, var(--tint)) 100%
+  );
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+}
+@media (forced-colors: active) {
+  .hero h1 { background: none; color: CanvasText; }
 }
 .lede { font-size: 1.125rem; line-height: 1.6; color: var(--ink-2); max-width: 36rem; margin: 1.25rem auto 2rem; }
 
@@ -920,7 +978,10 @@ html[dir='rtl'] .sweep i { animation-name: sweep-rtl; }
   border-radius: var(--radius);
   padding: 1rem 1.125rem;
 }
-.job-card .relbar { margin-bottom: 0.375rem; }
+/* Company and title lead; the badge sits at the end of the row and keeps its
+   width, so titles of different lengths still line the cards up. */
+.job-card-head { display: flex; align-items: flex-start; gap: 0.875rem; }
+.job-card-id { flex: 1; min-width: 0; }
 .job-company { margin: 0; font-size: 0.8125rem; font-weight: 600; color: var(--ink-2); }
 .job-card h3 { font-size: 0.9375rem; font-weight: 600; line-height: 1.35; }
 .job-card h3 a { color: var(--ink); text-decoration-color: var(--rule); text-underline-offset: 2px; }
@@ -995,3 +1056,226 @@ html[dir='rtl'] .sweep i { animation-name: sweep-rtl; }
 .check-detail { margin-top: 0.5rem; }
 .check-detail .fix + .fix { margin-top: 0.375rem; }
 .check-detail .q { display: block; font-family: var(--mono); font-size: 0.75rem; color: var(--ink-3); }
+
+/* --- The match ring --------------------------------------------------------
+   The verdict, stated once, at the top of the argument. The panel keeps its
+   own dark palette in both themes: this is the one card that should look the
+   same on a bright laptop and a phone at night, and a score reads as a
+   measurement when it is lit rather than printed. */
+
+.score-head { display: grid; gap: 1.5rem; align-items: start; }
+@media (min-width: 900px) {
+  /* Ring to the side on a wide page, as a rail beside the arithmetic. Grid
+     columns follow the writing direction, so this holds in Arabic too. */
+  .score-head { grid-template-columns: minmax(0, 1fr) 20rem; }
+  .score-head .score-head-main { grid-column: 1; grid-row: 1; }
+  .score-head .match-ring { grid-column: 2; grid-row: 1; }
+}
+
+.match-ring {
+  --ring-a: var(--violet-400);
+  --ring-b: var(--sky);
+  --band: var(--sky);
+  display: grid;
+  justify-items: center;
+  padding: 2rem 1.75rem 1.5rem;
+  border-radius: 18px;
+  background:
+    radial-gradient(120% 75% at 50% 0%, color-mix(in srgb, var(--band) 16%, transparent) 0%, transparent 60%),
+    linear-gradient(180deg, var(--panel-2) 0%, var(--panel) 60%);
+  color: #f3f1fa;
+  overflow: hidden;
+}
+/* The band colours the ring, the label and the wash behind them at once. */
+.match-ring.strong { --ring-a: var(--violet-400); --ring-b: var(--mint);  --band: var(--mint); }
+.match-ring.good   { --ring-a: var(--violet-400); --ring-b: var(--sky);   --band: var(--sky); }
+.match-ring.fair   { --ring-a: var(--violet-400); --ring-b: var(--amber); --band: var(--amber); }
+.match-ring.weak   { --ring-a: var(--violet-500); --ring-b: var(--coral); --band: var(--coral); }
+
+.ring-wrap { position: relative; width: 148px; height: 148px; }
+.ring { width: 100%; height: 100%; transform: rotate(-90deg); }
+.ring-track { stroke: rgba(255, 255, 255, 0.1); }
+.ring .g1 { stop-color: var(--ring-a); }
+.ring .g2 { stop-color: var(--ring-b); }
+.ring-value { filter: drop-shadow(0 0 7px color-mix(in srgb, var(--band) 45%, transparent)); }
+
+.ring-figure {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.ring-read { display: flex; align-items: baseline; gap: 0.12rem; }
+.ring-num {
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: 2.75rem;
+  line-height: 1;
+  letter-spacing: -0.04em;
+  font-variant-numeric: tabular-nums;
+}
+.ring-pct { font-size: 0.9375rem; font-weight: 600; opacity: 0.75; }
+.ring-band {
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: 0.9375rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--band);
+  margin: 1rem 0 0;
+}
+
+.ring-facts {
+  list-style: none;
+  width: 100%;
+  max-width: 19rem;
+  margin: 1.1rem 0 0;
+  padding: 1.1rem 0 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  display: grid;
+  gap: 0.5rem;
+}
+.ring-facts li { display: flex; align-items: baseline; gap: 0.55rem; font-size: 0.8125rem; }
+.ring-facts .tick { flex: none; width: 0.9rem; text-align: center; }
+.ring-facts li.ok  .tick { color: var(--mint); }
+.ring-facts li.low .tick { color: var(--coral); }
+.ring-facts .what { flex: 1; min-width: 0; color: rgba(255, 255, 255, 0.86); }
+.ring-facts .pts {
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.55);
+  font-variant-numeric: tabular-nums;
+}
+.ring-note {
+  max-width: 21rem;
+  margin: 0.9rem 0 0;
+  font-size: 0.6875rem;
+  line-height: 1.5;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+/* --- Waiting on a match ----------------------------------------------------
+   A CV being read, a bar that keeps moving, and the sentence saying what is
+   happening. The bar is indeterminate on purpose: we cannot know how long a
+   posting takes to fetch, and a bar that claims a percentage it has not
+   measured would be the one dishonest number on the page. */
+
+.matching { display: grid; justify-items: center; gap: 1.75rem; padding: 2.5rem 1rem 1.5rem; }
+.matching-doc { width: 84px; height: auto; color: var(--ink); }
+.matching-doc .sheet {
+  fill: var(--card);
+  stroke: currentColor;
+  stroke-width: 2.2;
+  stroke-linejoin: round;
+}
+.matching-doc .sheet.back { fill: color-mix(in srgb, var(--ink) 6%, var(--card)); opacity: 0.85; }
+.matching-doc .fold { fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linejoin: round; }
+.matching-doc .chip { fill: currentColor; opacity: 0.28; }
+.matching-doc .line { stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; }
+/* The lines brighten in turn, as if being read down the page. */
+.matching-doc .line { animation: read-line 2.2s ease-in-out infinite; opacity: 0.35; }
+.matching-doc .line:nth-of-type(1) { animation-delay: 0s; }
+.matching-doc .line:nth-of-type(2) { animation-delay: 0.25s; }
+.matching-doc .line:nth-of-type(3) { animation-delay: 0.5s; }
+.matching-doc .line:nth-of-type(4) { animation-delay: 0.75s; }
+@keyframes read-line { 0%, 70%, 100% { opacity: 0.3; } 25% { opacity: 1; } }
+
+.matching-track {
+  width: min(520px, 100%);
+  height: 6px;
+  border-radius: 999px;
+  background: var(--rule);
+  overflow: hidden;
+}
+.matching-track i {
+  display: block;
+  height: 100%;
+  width: 34%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--violet-500), var(--mint));
+  animation: matching-slide 1.6s ease-in-out infinite;
+}
+/* The fill is 34% of the track, so 294% carries its leading edge exactly to
+   the far end. Travelling further than that parks it out of sight and the bar
+   reads as stalled -- the one thing a progress bar must never do. */
+@keyframes matching-slide {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(294%); }
+}
+html[dir='rtl'] .matching-track i { animation-name: matching-slide-rtl; }
+@keyframes matching-slide-rtl {
+  0%   { transform: translateX(100%); }
+  100% { transform: translateX(-294%); }
+}
+
+.matching-label {
+  margin: 0;
+  max-width: 34rem;
+  text-align: center;
+  font-family: var(--display);
+  font-size: clamp(1.125rem, 2.4vw, 1.5rem);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.35;
+  color: var(--ink);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .matching-doc .line { animation: none; opacity: 0.6; }
+  .matching-track i { animation: none; width: 100%; opacity: 0.45; }
+}
+
+/* --- The match badge on a search result -------------------------------------
+   A measured number, not a ranking: the share of the posting's own wording the
+   CV carries, counted in Python before any model is called. It is banded with
+   the same words as the full ring but on its own scale -- see match.ts -- and
+   it is deliberately smaller and quieter than that ring, because a real score
+   costs an analysis and this one does not. */
+
+.match-badge {
+  --band: var(--ink-3);
+  flex: none;
+  display: grid;
+  justify-items: center;
+  gap: 0.3rem;
+  width: 5.25rem;
+  cursor: help;
+}
+.match-badge.strong { --band: var(--earned); }
+.match-badge.good   { --band: var(--accent); }
+.match-badge.fair   { --band: var(--major); }
+.match-badge.weak   { --band: var(--ink-3); }
+
+.badge-ring { position: relative; width: 52px; height: 52px; }
+.badge-ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+.badge-track { stroke: var(--rule); }
+.badge-value { stroke: var(--band); }
+.badge-num {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: 0.9375rem;
+  line-height: 1;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.badge-band {
+  font-family: var(--mono);
+  font-size: 0.5625rem;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  text-align: center;
+  line-height: 1.3;
+  color: var(--band);
+}
+
+@media (max-width: 480px) {
+  .match-badge { width: 4.5rem; }
+  .badge-ring { width: 44px; height: 44px; }
+}

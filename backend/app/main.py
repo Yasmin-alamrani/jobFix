@@ -23,7 +23,7 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="Resume Analyzer", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="jobFix", version="0.1.0", lifespan=lifespan)
 
 # Single-user mode runs the Vite dev server against this API on 8000. Any local
 # port is accepted, not just 5173: Vite quietly moves to 5174, 5175... when 5173

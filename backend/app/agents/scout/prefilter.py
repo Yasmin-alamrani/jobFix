@@ -53,6 +53,28 @@ january february march april may june july august september october november
 december mon tue wed thu fri sat sun year years month months day days
 """.split())
 
+# Job-ad furniture: the benefits block, the EEO paragraph, the "about us" and
+# the application process. Every advert carries it and it says nothing about
+# the work, so it is excluded when measuring how much of a posting a CV
+# covers. It is deliberately NOT removed in `tokenize`: ranking compares
+# postings against each other, where this vocabulary cancels out anyway, and
+# stripping it there would change every existing similarity.
+AD_BOILERPLATE = frozenset("""
+benefit benefits salary compensation bonus incentive pension insurance medical
+dental health wellness gym allowance discount stipend equity options shares
+leave holiday holidays vacation annual parental maternity paternity sick
+flexible hybrid remote onsite office relocation visa sponsorship
+opportunity opportunities employer equal diversity inclusive inclusion
+background backgrounds regardless race gender religion disability veteran
+orientation identity age applicants applications applying recruiter recruitment
+hiring process interview offer start date immediately urgently
+join joining looking seeking passionate motivated dynamic fast-paced
+environment culture mission vision values people person individual
+welcome welcoming thrive grow growth career careers journey world class
+leading leader global regional local industry market customers clients
+competitive generous outstanding exciting great best top
+""".split())
+
 _TOKEN = re.compile(r"[a-z][a-z0-9+#.\-]{1,}")
 
 # How many times a job's title is repeated into its token stream. 3 is enough
@@ -89,6 +111,11 @@ class Candidate:
     job: JobPosting
     similarity: float
     overlap: tuple[str, ...]   # rare terms shared by CV and posting
+    # Share of this posting's distinctive terms the CV contains, 0..1.
+    # Unlike `similarity` -- a cosine whose magnitude only means anything
+    # against the other results in the same scan -- this one is a fraction of
+    # a fixed denominator, so it can be shown to a person as a number.
+    coverage: float = 0.0
 
     @property
     def why(self) -> str:
@@ -117,6 +144,29 @@ def _idf(docs: list[list[str]]) -> dict[str, float]:
     for doc in docs:
         seen.update(set(doc))
     return {t: max(IDF_FLOOR, math.log((n + 1) / (df + 1))) for t, df in seen.items()}
+
+
+def _coverage(tokens: list[str], resume_set: set[str]) -> float:
+    """How much of what a posting asks for appears in the CV, 0..1.
+
+    Weighted by how much the posting leans on each term -- its own log-scaled
+    term frequency, with the title already repeated into the stream -- and by
+    nothing else. Deliberately no IDF: IDF is a property of the corpus, so the
+    same posting would score differently depending on what else a scan
+    returned, and a percentage on a card has to mean the same thing every time
+    it is shown.
+
+    The benefits and equal-opportunity blocks are dropped first. They are a
+    third of a long advert and identical across all of them, so leaving them
+    in drags every posting toward the same low number and a perfect match
+    reads about as well as a poor one.
+    """
+    weights = {t: w for t, w in _tf(tokens).items() if t not in AD_BOILERPLATE}
+    total = sum(weights.values())
+    if total <= 0:
+        return 0.0
+    carried = sum(w for t, w in weights.items() if t in resume_set)
+    return carried / total
 
 
 def _cosine(a: dict[str, float], b: dict[str, float]) -> float:
@@ -189,7 +239,12 @@ def rank(
         overlap = tuple(
             sorted(resume_set & set(tokens), key=lambda t: idf.get(t, 0.0), reverse=True)
         )[:10]
-        out.append(Candidate(job=job, similarity=round(score, 4), overlap=overlap))
+        out.append(Candidate(
+            job=job,
+            similarity=round(score, 4),
+            overlap=overlap,
+            coverage=round(_coverage(tokens, resume_set), 4),
+        ))
 
     out.sort(key=lambda c: c.similarity, reverse=True)
     return out[:limit] if limit else out

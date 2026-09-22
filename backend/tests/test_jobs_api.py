@@ -178,6 +178,27 @@ def test_results_say_what_each_posting_states(tailor_client, searchable):
     assert body["hidden"] == {}
 
 
+def test_every_result_carries_a_readable_coverage(tailor_client, searchable):
+    """The number each card shows. It has to reach the client on every result.
+
+    `similarity` ranks but cannot be read on its own; `coverage` is a share of
+    the posting's own wording, so it is what the UI prints. A result without it
+    would render a badge reading 0%.
+    """
+    body = find(tailor_client, searchable).json()
+    assert body["candidates"], "no candidates to check"
+    for c in body["candidates"]:
+        assert "coverage" in c, c["title"]
+        assert 0.0 <= c["coverage"] <= 1.0
+
+    # A backend CV against a backend role should carry more of its wording
+    # than a management role's.
+    by_title = {c["title"]: c for c in body["candidates"]}
+    if "Senior Backend Engineer" in by_title and "Engineering Manager" in by_title:
+        assert (by_title["Senior Backend Engineer"]["coverage"]
+                > by_title["Engineering Manager"]["coverage"])
+
+
 def test_a_work_arrangement_filter_reports_what_it_hid(tailor_client, searchable):
     body = find(tailor_client, searchable, work_mode="remote").json()
     assert {c["title"] for c in body["candidates"]} <= {"Backend Engineer"}

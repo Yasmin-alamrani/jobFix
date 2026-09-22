@@ -1,4 +1,4 @@
-# Resume Analyzer
+# jobFix
 
 Two agents for a Saudi job search:
 

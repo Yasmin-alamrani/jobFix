@@ -67,6 +67,10 @@ class CandidateOut(BaseModel):
     company: str
     location: str
     similarity: float
+    # Share of this posting's distinctive terms the CV carries, 0..1. The
+    # cosine above ranks; this one is the only number of the two that means
+    # anything shown on its own to a person.
+    coverage: float = 0.0
     overlap: list[str]
     apply_url: str
     source: str
@@ -236,6 +240,7 @@ def find(
             CandidateOut(
                 id=c.job.dedupe_key, title=c.job.title, company=c.job.company,
                 location=c.job.location, similarity=c.similarity,
+                coverage=c.coverage,
                 overlap=list(c.overlap), apply_url=c.job.apply_url,
                 source=c.job.source, publisher=c.job.publisher, remote=c.job.remote,
                 seniority=job_filters.seniority_of(c.job.title),

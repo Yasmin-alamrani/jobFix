@@ -1,6 +1,8 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { findJobs, getCachedJob } from './api';
 import { useText } from './i18n';
+import Matching from './Matching';
+import MatchBadge from './MatchBadge';
 import type { FindResponse, JobIn, ScoutCandidate } from './types';
 
 /* Finding jobs is free: the search runs over job boards and Google for Jobs,
@@ -60,7 +62,9 @@ const en = {
   searching: 'Searching job boards and Google for Jobs…',
   search: 'Find jobs',
   found: (shown: number, total: number) => `${shown} best matches of ${total} found`,
-  ranked: 'Ranked by how much each posting overlaps with your CV. Free — no AI yet.',
+  ranked:
+    'Each card shows how much of the posting’s wording your CV already carries — ' +
+    'counted, not analysed, and free. Open one to score it properly.',
   nothing: 'No jobs matched. Try a different role, or widen the places.',
   matchIt: 'Match against my CV',
   opening: 'Opening…',
@@ -119,7 +123,9 @@ const ar: typeof en = {
   searching: 'جارٍ البحث في لوحات الوظائف وGoogle للوظائف…',
   search: 'ابحث عن وظائف',
   found: (shown: number, total: number) => `أفضل ${shown} نتيجة من أصل ${total}`,
-  ranked: 'مرتّبة حسب تقاطع كل إعلان مع سيرتك الذاتية. مجانًا — بلا ذكاء اصطناعي بعد.',
+  ranked:
+    'تعرض كل بطاقة نسبة ما تتضمنه سيرتك الذاتية من مفردات الإعلان — إحصاء لا تحليل، ' +
+    'وبالمجان. افتح أحدها لتقييمه فعليًا.',
   nothing: 'لا توجد وظائف مطابقة. جرّب دورًا آخر أو وسّع المواقع.',
   matchIt: 'طابقها مع سيرتي الذاتية',
   opening: 'جارٍ الفتح…',
@@ -168,18 +174,6 @@ function metaLine(c: ScoutCandidate, t: T): string {
   return [level, mode, postedLabel(c.posted_at, t)].join(' · ');
 }
 
-/* Relative only. The raw cosine similarity is meaningless as an absolute
-   number — 0.085 is a strong match in this corpus — so it is drawn, not
-   printed: it ranks, it does not grade. */
-function Bar({ value, max }: { value: number; max: number }) {
-  const pct = max > 0 ? Math.round((100 * value) / max) : 0;
-  return (
-    <span className="relbar" aria-hidden="true">
-      <span style={{ width: `${Math.max(pct, 2)}%` }} />
-    </span>
-  );
-}
-
 export default function Scout({
   resumeId,
   onMatchJob,
@@ -198,11 +192,6 @@ export default function Scout({
   const [searching, setSearching] = useState(false);
   const [opening, setOpening] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-
-  const topSimilarity = useMemo(
-    () => (found?.candidates.length ? found.candidates[0].similarity : 0),
-    [found],
-  );
 
   async function search(event: React.FormEvent) {
     event.preventDefault();
@@ -332,14 +321,7 @@ export default function Scout({
         </div>
 
         {error && <p className="error">{error}</p>}
-        {searching && (
-          <div className="working">
-            <span className="sweep">
-              <i />
-            </span>
-            {t.searching}
-          </div>
-        )}
+        {searching && <Matching label={t.searching} />}
       </form>
 
       {found && !searching && (
@@ -363,16 +345,20 @@ export default function Scout({
               <div className="job-grid">
                 {found.candidates.map((c) => (
                   <article className="job-card" key={c.id}>
-                    <Bar value={c.similarity} max={topSimilarity} />
-                    <p className="job-company" dir="auto">
-                      {c.company}
-                      {c.publisher && <span className="via">{t.via(c.publisher)}</span>}
-                    </p>
-                    <h3 dir="auto">
-                      <a href={c.apply_url} target="_blank" rel="noreferrer noopener">
-                        {c.title}
-                      </a>
-                    </h3>
+                    <div className="job-card-head">
+                      <div className="job-card-id">
+                        <p className="job-company" dir="auto">
+                          {c.company}
+                          {c.publisher && <span className="via">{t.via(c.publisher)}</span>}
+                        </p>
+                        <h3 dir="auto">
+                          <a href={c.apply_url} target="_blank" rel="noreferrer noopener">
+                            {c.title}
+                          </a>
+                        </h3>
+                      </div>
+                      <MatchBadge coverage={c.coverage} />
+                    </div>
                     <p className="q" dir="auto">{c.location}</p>
                     <p className="q">{metaLine(c, t)}</p>
                     {c.overlap.length > 0 && (

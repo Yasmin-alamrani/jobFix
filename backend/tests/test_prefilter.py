@@ -141,3 +141,56 @@ def test_similarity_stays_in_range():
     jobs = [_job("Backend Engineer", BACKEND_CV)]   # identical text: the ceiling
     c = rank(BACKEND_CV, jobs)[0]
     assert 0.0 <= c.similarity <= 1.5   # title-hint lift can exceed 1.0
+
+
+# --- coverage ----------------------------------------------------------------
+#
+# `similarity` ranks but cannot be read on its own -- a cosine of 0.085 is a
+# strong match in one scan and a weak one in another. `coverage` is a fraction
+# of the posting's own distinctive terms, so it is the number the UI shows.
+
+def test_coverage_is_a_fraction():
+    jobs = [_job("Backend Engineer", "Python PostgreSQL Django Kafka Docker AWS payments")]
+    [c] = rank(BACKEND_CV, jobs)
+    assert 0.0 <= c.coverage <= 1.0
+
+
+def test_coverage_falls_as_the_role_drifts_from_the_cv():
+    jobs = [
+        _job("Senior Backend Engineer",
+             "Python, PostgreSQL, Django, Kafka, Docker, AWS. Payment settlement and "
+             "merchant payouts APIs. Reconciliation at scale."),
+        _job("Data Engineer", "Kafka, Spark, Airflow, PostgreSQL pipelines on AWS."),
+        _job("Marketing Manager",
+             "Own brand campaigns, social calendar, influencer partnerships and agency "
+             "relationships for the Gulf region."),
+    ]
+    backend, data, marketing = rank(BACKEND_CV, jobs)
+    assert backend.job.title == "Senior Backend Engineer"
+    assert backend.coverage > data.coverage > marketing.coverage
+
+
+def test_coverage_is_zero_when_nothing_is_shared():
+    jobs = [_job("Marketing Manager",
+                 "Brand campaigns, influencer partnerships, agency relationships, budgets.")]
+    [c] = rank(BACKEND_CV, jobs)
+    assert c.coverage == 0.0
+
+
+def test_coverage_does_not_depend_on_the_rest_of_the_scan():
+    """The point of the measure: a posting scores the same alone as in a crowd.
+
+    The cosine cannot do this -- IDF shifts with the corpus, so adding
+    unrelated jobs moves every similarity. Coverage is a share of one
+    posting's own terms, so it barely moves, and a card can show it as a
+    number without the other results changing what it means.
+    """
+    target = _job("Senior Backend Engineer",
+                  "Python, PostgreSQL, Django, Kafka, Docker, AWS. Payment settlement APIs.")
+    noise = [_job(f"Retail Associate {i}", "Greet customers, stock shelves, operate a till.")
+             for i in range(8)]
+
+    alone = rank(BACKEND_CV, [target])[0].coverage
+    crowded = next(c for c in rank(BACKEND_CV, [target, *noise])
+                   if c.job.title == "Senior Backend Engineer").coverage
+    assert alone == crowded
