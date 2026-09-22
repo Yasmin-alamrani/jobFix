@@ -14,16 +14,32 @@
       // page never flashes the other theme or flips direction after loading.
       // Without a stored choice the stylesheet follows the system theme, and
       // the language follows the browser's first language.
+      //
+      // Both settings were stored under resume-analyzer-* before the app was
+      // called jobFix. This script runs before anything else on the page, so
+      // it is where the old names are carried over: read the new key, fall
+      // back to the old one, and move it across. A returning reader keeps the
+      // theme and language they chose.
       (function () {
         var root = document.documentElement;
-        try {
-          var t = localStorage.getItem('resume-analyzer-theme');
-          if (t === 'light' || t === 'dark') root.dataset.theme = t;
-        } catch (e) {}
-        var l = null;
-        try {
-          l = localStorage.getItem('resume-analyzer-lang');
-        } catch (e) {}
+        function read(key, was) {
+          try {
+            var v = localStorage.getItem(key);
+            if (v === null) {
+              v = localStorage.getItem(was);
+              if (v !== null) {
+                localStorage.setItem(key, v);
+                localStorage.removeItem(was);
+              }
+            }
+            return v;
+          } catch (e) {
+            return null; // private windows and blocked storage
+          }
+        }
+        var t = read('jobfix-theme', 'resume-analyzer-theme');
+        if (t === 'light' || t === 'dark') root.dataset.theme = t;
+        var l = read('jobfix-lang', 'resume-analyzer-lang');
         if (l !== 'en' && l !== 'ar') {
           var first = (navigator.languages && navigator.languages[0]) || navigator.language || '';
           l = first.toLowerCase().indexOf('ar') === 0 ? 'ar' : 'en';

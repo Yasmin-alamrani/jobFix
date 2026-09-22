@@ -1,4 +1,5 @@
 import { createContext, createElement, useContext, useLayoutEffect, useState, type ReactNode } from 'react';
+import { remember, remembered } from './storage';
 
 /* English or Arabic, remembered on this device.
 
@@ -12,15 +13,12 @@ import { createContext, createElement, useContext, useLayoutEffect, useState, ty
 
 export type Lang = 'en' | 'ar';
 
-const KEY = 'resume-analyzer-lang';
+const KEY = 'jobfix-lang';
+const WAS = 'resume-analyzer-lang';   // what it was called before jobFix
 
 function stored(): Lang | null {
-  try {
-    const value = localStorage.getItem(KEY);
-    return value === 'en' || value === 'ar' ? value : null;
-  } catch {
-    return null; // private windows and blocked storage: fall back to the browser
-  }
+  const value = remembered(KEY, WAS);
+  return value === 'en' || value === 'ar' ? value : null;
 }
 
 function fromBrowser(): Lang {
@@ -63,11 +61,7 @@ export function LangProvider({ children }: { children: ReactNode }) {
   }, [lang]);
 
   function setLang(next: Lang) {
-    try {
-      localStorage.setItem(KEY, next);
-    } catch {
-      /* the choice still holds for this visit */
-    }
+    remember(KEY, next);
     setState(next);
   }
 

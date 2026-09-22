@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { remember, remembered } from './storage';
 
 /* Light or dark, remembered on this device.
 
@@ -9,15 +10,12 @@ import { useEffect, useState } from 'react';
    flash on load. */
 export type Theme = 'light' | 'dark';
 
-const KEY = 'resume-analyzer-theme';
+const KEY = 'jobfix-theme';
+const WAS = 'resume-analyzer-theme';   // what it was called before jobFix
 
 function stored(): Theme | null {
-  try {
-    const value = localStorage.getItem(KEY);
-    return value === 'light' || value === 'dark' ? value : null;
-  } catch {
-    return null; // private windows and blocked storage: fall back to the system
-  }
+  const value = remembered(KEY, WAS);
+  return value === 'light' || value === 'dark' ? value : null;
 }
 
 function system(): Theme {
@@ -34,11 +32,7 @@ export function useTheme(): [Theme, () => void] {
   function toggle() {
     setTheme((current) => {
       const next: Theme = current === 'dark' ? 'light' : 'dark';
-      try {
-        localStorage.setItem(KEY, next);
-      } catch {
-        /* the choice still holds for this visit */
-      }
+      remember(KEY, next);
       return next;
     });
   }
