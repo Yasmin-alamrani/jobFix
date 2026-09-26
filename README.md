@@ -78,6 +78,42 @@ cd frontend && npm install && npm run dev
 
 Then open http://localhost:5173. To see the dashboard with sample data and no API spend, open http://localhost:5173/demo.html.
 
+## Deploying
+
+**The front end goes on Vercel; the back end cannot.** `vercel.json` at the
+repository root builds `frontend/` and serves `frontend/dist`, so a Vercel
+project pointed at this repo needs no settings changed. Give it one
+environment variable:
+
+```
+VITE_API_URL=https://your-api-host
+```
+
+Without it the built site calls `http://localhost:8000` and every request
+fails once it is not your own machine serving it.
+
+The back end needs a host that runs a container, not a serverless function --
+Render, Railway, Fly.io or a plain VPS. Four things rule Vercel out:
+
+| What | Why it does not fit |
+|---|---|
+| Playwright | The scout renders pages in a real Chromium, far past a function bundle's size limit |
+| WeasyPrint | PDF export needs Pango and Cairo from the system, which the Python runtime does not carry |
+| SQLite and `storage/uploads` | The filesystem is read-only apart from `/tmp`, and `/tmp` does not survive the invocation -- uploaded CVs and every analysis would vanish |
+| Model calls | The Gemini client waits up to 180s; a Hobby function is killed long before that |
+
+On the API host, set `CORS_ORIGINS` to the deployed site, or the browser will
+refuse every response:
+
+```
+CORS_ORIGINS=https://your-site.vercel.app
+DATABASE_URL=postgresql+psycopg://…     # SQLite is fine locally, not on a host that redeploys
+GEMINI_API_KEY=…
+```
+
+Localhost keeps working alongside whatever is listed there, so a deployed API
+can still be driven from a dev server.
+
 ## Tests
 
 ```bash

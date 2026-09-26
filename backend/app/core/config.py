@@ -31,9 +31,25 @@ class Settings(BaseSettings):
     jsearch_api_key: str = ""
     jsearch_country: str = "sa"
 
+    # --- Serving ---
+    # Origins allowed to call the API, comma separated. Localhost is always
+    # allowed (see main.py); this is for a deployed front end, which lives on
+    # a different host to the API and so is a cross-origin caller:
+    #   CORS_ORIGINS=https://jobfix.vercel.app
+    cors_origins: str = ""
+
     # Single-user mode: every row is stamped with this owner so that adding real
     # accounts later is a migration rather than a rewrite.
     default_user_id: str = "local"
+
+    @property
+    def allowed_origins(self) -> list[str]:
+        """`cors_origins` as a list, blanks and stray trailing slashes dropped.
+
+        A browser's Origin header never carries a trailing slash, so one
+        pasted into the variable would silently match nothing.
+        """
+        return [o.strip().rstrip("/") for o in self.cors_origins.split(",") if o.strip()]
 
 
 @lru_cache

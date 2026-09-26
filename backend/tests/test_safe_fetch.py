@@ -211,3 +211,26 @@ def test_legitimate_hard_blocks_still_report_as_hard_blocks():
         Policy.for_pasted_url("https://www.bayt.com/en/jobs/").check(
             "https://www.bayt.com/en/jobs/"
         )
+
+
+# --- allowed origins -----------------------------------------------------------
+#
+# A deployed front end calls the API cross-origin. The list comes from an
+# environment variable, so it has to survive the ways one gets typed.
+
+def test_cors_origins_parse_into_a_list():
+    from app.core.config import Settings
+    s = Settings(cors_origins="https://jobfix.vercel.app,https://jobfix.app")
+    assert s.allowed_origins == ["https://jobfix.vercel.app", "https://jobfix.app"]
+
+
+def test_cors_origins_tolerate_spaces_blanks_and_trailing_slashes():
+    """A trailing slash would match nothing: Origin headers never carry one."""
+    from app.core.config import Settings
+    s = Settings(cors_origins=" https://jobfix.vercel.app/ , , https://jobfix.app ")
+    assert s.allowed_origins == ["https://jobfix.vercel.app", "https://jobfix.app"]
+
+
+def test_no_cors_origins_means_none():
+    from app.core.config import Settings
+    assert Settings(cors_origins="").allowed_origins == []

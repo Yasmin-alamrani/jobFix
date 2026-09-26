@@ -31,6 +31,10 @@ app = FastAPI(title="jobFix", version="0.1.0", lifespan=lifespan)
 # the backend is running fine. Local only either way -- no remote origin matches.
 app.add_middleware(
     CORSMiddleware,
+    # A deployed front end is a cross-origin caller: it is served from Vercel
+    # and the API from somewhere else. Those hosts are named in CORS_ORIGINS;
+    # the regex below keeps every local port working alongside them.
+    allow_origins=get_settings().allowed_origins,
     allow_origin_regex=r"http://(localhost|127\.0\.0\.1):\d+",
     allow_credentials=True,
     allow_methods=["*"],
