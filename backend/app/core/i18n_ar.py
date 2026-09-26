@@ -214,6 +214,8 @@ EXACT: dict[str, str] = {
         "ارفع سيرة ذاتية بدلًا من خطاب تقديم أو كشف درجات أو وصف وظيفي.",
     "Resume must be under 15 MB.": "يجب أن يكون حجم السيرة الذاتية أقل من 15 ميغابايت.",
     "Resume not found.": "لم يُعثر على السيرة الذاتية.",
+    "That CV's file is no longer on this server. Upload it again.":
+        "لم يعد ملف هذه السيرة الذاتية موجودًا على الخادم. ارفعه من جديد.",
     "Upload it first.": "ارفعها أولًا.",
     "Analysis not found.": "لم يُعثر على التحليل.",
     "Version not found.": "لم يُعثر على النسخة.",

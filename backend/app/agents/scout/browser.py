@@ -28,7 +28,19 @@ import logging
 from dataclasses import dataclass
 from types import TracebackType
 
-from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
+try:
+    from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
+except ImportError:  # pragma: no cover - environment dependent
+    # Playwright is optional. It is the heaviest thing the project depends on
+    # -- a real Chromium -- and it earns that weight in exactly one place:
+    # rung 2 of reading a pasted URL. A deployment that leaves it out still
+    # searches, still scores, and still reads any posting whose page carries
+    # its own structured data; the rest fall through to the aggregator lookup,
+    # which is where they were headed anyway. Importing it at module level
+    # would make the whole API refuse to start without a browser installed.
+    class PlaywrightTimeoutError(Exception):
+        """Stand-in so this module imports where Playwright is absent."""
+
 
 from .policy import USER_AGENT, Policy, PolicyViolation, WallEncountered, looks_like_a_wall
 

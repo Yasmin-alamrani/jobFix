@@ -310,3 +310,73 @@ def test_a_concurrent_extraction_is_absorbed_rather_than_a_500(client, monkeypat
     db = SessionLocal()
     assert db.query(StoredProfile).filter_by(resume_id=resume_id).count() == 1
     db.close()
+
+
+# --- surviving a wiped disk ----------------------------------------------------
+#
+# A free host hands the container a new filesystem on every deploy. The row
+# describing a CV outlives the file it points at, and parseability is measured
+# from the PDF itself, so without the bytes in the database every CV uploaded
+# before a restart would become unanalysable.
+
+def _stored(resume_id: str):
+    from app.models.db import SessionLocal
+    from app.models.entities import Resume
+    with SessionLocal() as db:
+        row = db.get(Resume, resume_id)
+        return row.stored_path, (row.file.content if row.file else None)
+
+
+def test_the_document_is_kept_in_the_database(client):
+    resume_id = _paste(client, CV_TEXT).json()["id"]
+    path, content = _stored(resume_id)
+    assert content, "the upload should have been stored in resume_files"
+    assert content == Path(path).read_bytes()
+
+
+def test_a_missing_file_is_restored_from_the_database(client):
+    """The disk is wiped; the next read puts the file back rather than failing."""
+    from app.api.resumes import ensure_local
+    from app.models.db import SessionLocal
+    from app.models.entities import Resume
+
+    resume_id = _paste(client, CV_TEXT).json()["id"]
+    path, original = _stored(resume_id)
+
+    Path(path).unlink()                      # the deploy that loses the disk
+    assert not Path(path).exists()
+
+    with SessionLocal() as db:
+        restored = ensure_local(db.get(Resume, resume_id))
+
+    assert restored.exists()
+    assert restored.read_bytes() == original
+
+
+def test_the_visual_review_survives_the_disk_being_wiped(client):
+    """Through the API rather than the helper: the case that used to break."""
+    resume_id = _paste(client, CV_TEXT).json()["id"]
+    path, _ = _stored(resume_id)
+    Path(path).unlink()
+
+    assert client.get(f"/api/resumes/{resume_id}/profile").status_code == 200
+
+
+def test_a_cv_with_no_stored_bytes_reports_itself_gone(client):
+    """A row predating this table has no file to restore, and must say so."""
+    from fastapi import HTTPException
+    from app.api.resumes import ensure_local
+    from app.models.db import SessionLocal
+    from app.models.entities import Resume
+
+    resume_id = _paste(client, CV_TEXT).json()["id"]
+    path, _ = _stored(resume_id)
+    Path(path).unlink()
+    with SessionLocal() as db:
+        row = db.get(Resume, resume_id)
+        row.file = None                      # as an older row would be
+        db.commit()
+
+    with SessionLocal() as db, pytest.raises(HTTPException) as caught:
+        ensure_local(db.get(Resume, resume_id))
+    assert caught.value.status_code == 410

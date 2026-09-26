@@ -1,0 +1,12 @@
+-r requirements.txt
+
+# Development and local use only; a deployment does not install these.
+pytest==8.3.4
+pytest-asyncio==0.25.0
+
+# Playwright drives a real Chromium for rung 2 of reading a pasted URL -- the
+# rendered-page fallback. It is by far the heaviest thing here, and the API
+# runs without it: that rung is skipped and the posting is looked up through
+# Google for Jobs instead, which is where it was headed next anyway. Leaving
+# it out is what lets the backend fit a free host.
+playwright==1.49.1

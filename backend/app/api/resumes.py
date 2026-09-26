@@ -24,7 +24,7 @@ from app.core.i18n import Lang, tr, ui_lang
 from app.core.config import get_settings
 from app.core.ratelimit import analysis_limit, upload_limit
 from app.models.db import get_db
-from app.models.entities import Analysis, Resume, StoredProfile, StoredReview
+from app.models.entities import Analysis, Resume, ResumeFile, StoredProfile, StoredReview
 from app.prompts import profile_v1, review_v1
 
 log = logging.getLogger(__name__)
@@ -105,6 +105,7 @@ def upload_resume(
         stored_path=str(stored),
         content_type=file.content_type,
     )
+    row.file = ResumeFile(content=stored.read_bytes())
     db.add(row)
     db.commit()
     return ResumeOut(id=row.id, filename=row.filename)
@@ -130,7 +131,7 @@ def create_analysis(
 
     with model_errors("analysis"):
         result = analyze(
-            resume_path=Path(resume.stored_path),
+            resume_path=ensure_local(resume),
             job_description=job_description,
             industry=industry,
             job_title=job_title,
@@ -189,6 +190,31 @@ def owned_resume(db: Session, resume_id: str) -> Resume:
     return resume
 
 
+def ensure_local(resume: Resume) -> Path:
+    """The resume's PDF on disk, put back from the database if it is missing.
+
+    The file is written to disk on upload and read from there afterwards. On a
+    host that hands the container a fresh filesystem on every deploy -- which
+    is what the free tiers do -- that file is gone while the row describing it
+    remains, and every analysis of an already-uploaded CV would fail. The
+    bytes are kept in `resume_files` as the thing of record; this restores the
+    copy on disk the first time it is wanted again.
+    """
+    path = Path(resume.stored_path)
+    if path.exists():
+        return path
+
+    stored = resume.file      # lazy-loaded through this row's own session
+    if stored is None:
+        raise HTTPException(
+            410,
+            "That CV's file is no longer on this server. Upload it again.",
+        )
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(stored.content)
+    return path
+
+
 def text_of(resume: Resume) -> str:
     """The CV's text, preferring the original over anything re-extracted.
 
@@ -199,7 +225,7 @@ def text_of(resume: Resume) -> str:
     if resume.source_text.strip():
         return resume.source_text
 
-    report = parse_pdf(Path(resume.stored_path))
+    report = parse_pdf(ensure_local(resume))
     if not report.has_extractable_text:
         raise HTTPException(
             422,
@@ -272,6 +298,7 @@ def upload_resume_text(
         content_type="text/plain",
         source_text=body,
     )
+    row.file = ResumeFile(content=stored.read_bytes())
     db.add(row)
     db.commit()
     return ResumeOut(id=row.id, filename=row.filename)
@@ -367,7 +394,7 @@ def get_review(
     text = text_of(resume)
     profile = CvProfile.model_validate(ensure_profile(db, resume).profile)
     # A pasted CV's PDF is our own plain render of it; its layout says nothing.
-    report = None if resume.source_text.strip() else parse_pdf(Path(resume.stored_path))
+    report = None if resume.source_text.strip() else parse_pdf(ensure_local(resume))
 
     with model_errors("CV review"):
         review = review_cv(text, profile=profile, report=report, lang=lang)

@@ -9,7 +9,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, String, Text
+from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, LargeBinary, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.db import Base
@@ -41,6 +41,9 @@ class Resume(Base):
     analyses: Mapped[list["Analysis"]] = relationship(
         back_populates="resume", cascade="all, delete-orphan"
     )
+    file: Mapped["ResumeFile | None"] = relationship(
+        back_populates="resume", cascade="all, delete-orphan", uselist=False
+    )
     profile: Mapped["StoredProfile | None"] = relationship(
         back_populates="resume", cascade="all, delete-orphan", uselist=False
     )
@@ -56,6 +59,31 @@ class Resume(Base):
     versions: Mapped[list["CvVersion"]] = relationship(
         back_populates="resume", cascade="all, delete-orphan"
     )
+
+
+class ResumeFile(Base):
+    """The uploaded document itself, kept beside the row that describes it.
+
+    The file is not incidental: parseability is measured from the PDF, not
+    from text pulled out of it, so every analysis re-reads it. Keeping it only
+    on disk means it survives exactly as long as the disk does -- which on a
+    free host is until the next deploy or restart, after which every CV
+    already uploaded becomes unanalysable.
+
+    Its own table rather than a column on `resumes`: the schema is created
+    with `create_all` and never migrated, and create_all adds missing tables
+    but not missing columns, so a new column would never appear on a database
+    that already exists.
+    """
+
+    __tablename__ = "resume_files"
+
+    resume_id: Mapped[str] = mapped_column(
+        ForeignKey("resumes.id", ondelete="CASCADE"), primary_key=True
+    )
+    content: Mapped[bytes] = mapped_column(LargeBinary)
+
+    resume: Mapped["Resume"] = relationship(back_populates="file")
 
 
 class Analysis(Base):

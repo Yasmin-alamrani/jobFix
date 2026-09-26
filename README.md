@@ -33,8 +33,12 @@ brew install pango
 Then the Python side:
 
 ```bash
-cd backend && python3 -m venv .venv && ./.venv/bin/python -m pip install -r requirements.txt
+cd backend && python3 -m venv .venv && ./.venv/bin/python -m pip install -r requirements-dev.txt
 ```
+
+`requirements-dev.txt` is `requirements.txt` plus the test runner and
+Playwright. `requirements.txt` alone is what a deployment installs -- see
+[Deploying](#deploying) -- and leaves the browser out.
 
 Commands here call tools through `python -m` rather than `./.venv/bin/<tool>`.
 A venv's scripts hard-code the path it was created at, so moving the project
@@ -80,39 +84,48 @@ Then open http://localhost:5173. To see the dashboard with sample data and no AP
 
 ## Deploying
 
-**The front end goes on Vercel; the back end cannot.** `vercel.json` at the
-repository root builds `frontend/` and serves `frontend/dist`, so a Vercel
-project pointed at this repo needs no settings changed. Give it one
-environment variable:
+It fits on free tiers, in three pieces: the site on Vercel, the API as a
+container somewhere that runs one, and Postgres from anyone who gives it away.
+
+**The site.** `vercel.json` at the repository root builds `frontend/` and
+serves `frontend/dist`, so a Vercel project pointed at this repo needs no
+settings changed. Set one environment variable, or the built page calls
+`http://localhost:8000` and fails everywhere except your own machine:
 
 ```
 VITE_API_URL=https://your-api-host
 ```
 
-Without it the built site calls `http://localhost:8000` and every request
-fails once it is not your own machine serving it.
+**The API.** Not on Vercel: a serverless function has no writable disk that
+outlives the request and is killed long before a 180s model call returns. It
+needs a host that runs a container -- Render, Koyeb, Fly.io, Cloud Run, a
+VPS. The `Dockerfile` at the root builds it, and deliberately leaves out
+Playwright, which would multiply the image size and wants more memory than a
+free instance has. What that costs is one rung of reading a pasted URL: a page
+needing JavaScript to render is looked up through Google for Jobs instead,
+which is where it was headed next anyway. Searching, scoring, tailoring and
+export are untouched.
 
-The back end needs a host that runs a container, not a serverless function --
-Render, Railway, Fly.io or a plain VPS. Four things rule Vercel out:
-
-| What | Why it does not fit |
-|---|---|
-| Playwright | The scout renders pages in a real Chromium, far past a function bundle's size limit |
-| WeasyPrint | PDF export needs Pango and Cairo from the system, which the Python runtime does not carry |
-| SQLite and `storage/uploads` | The filesystem is read-only apart from `/tmp`, and `/tmp` does not survive the invocation -- uploaded CVs and every analysis would vanish |
-| Model calls | The Gemini client waits up to 180s; a Hobby function is killed long before that |
-
-On the API host, set `CORS_ORIGINS` to the deployed site, or the browser will
-refuse every response:
+Set on the API host:
 
 ```
-CORS_ORIGINS=https://your-site.vercel.app
-DATABASE_URL=postgresql+psycopg://…     # SQLite is fine locally, not on a host that redeploys
 GEMINI_API_KEY=…
+DATABASE_URL=postgresql+psycopg://…       # not SQLite: see below
+CORS_ORIGINS=https://your-site.vercel.app # or the browser refuses every reply
 ```
 
-Localhost keeps working alongside whatever is listed there, so a deployed API
-can still be driven from a dev server.
+**Postgres, not SQLite, and no disk.** A free container is handed a fresh
+filesystem on every deploy and restart. Uploaded CVs used to live only on
+disk while the rows describing them lived in the database, so a redeploy left
+every CV unanalysable -- parseability is measured from the PDF itself, not
+from text pulled out of it. The document is now kept in `resume_files` and
+written back to disk the first time it is wanted again, so the only thing that
+has to persist is the database. Free Postgres from Neon or Supabase does not
+expire the way a host's bundled free database tends to.
+
+What a free tier still costs you: the instance sleeps when idle, so the first
+request after a quiet spell waits for it to wake, on top of however long the
+model takes.
 
 ## Tests
 
